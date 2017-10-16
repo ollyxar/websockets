@@ -1,18 +1,33 @@
 <?php namespace Ollyxar\WebSockets;
 
+/**
+ * Class Master
+ * @package Ollyxar\WebSockets
+ */
 class Master
 {
     private $workers = [];
     private $clients = [];
     private $connector;
 
+    /**
+     * Master constructor.
+     *
+     * @param $workers
+     * @param $connector
+     */
     public function __construct($workers, $connector)
     {
         $this->clients = $this->workers = $workers;
         $this->connector = $connector;
     }
 
-    public function dispatch()
+    /**
+     * Dispatch messaging
+     *
+     * @return void
+     */
+    public function dispatch(): void
     {
         while (true) {
             $read = $this->clients;

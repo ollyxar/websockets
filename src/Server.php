@@ -2,6 +2,10 @@
 
 use \Exception;
 
+/**
+ * Class Server
+ * @package Ollyxar\WebSockets
+ */
 class Server
 {
     private $socket;
@@ -13,17 +17,31 @@ class Server
     protected $cert;
     protected $passPhrase;
     protected $workerCount = 4;
+    protected $handler;
     public static $connector = '/var/run/wsc.sock';
 
-    public function __construct($host, $port, $useSSL = false, $cert = '/etc/nginx/conf.d/wss.pem', $passPhrase = 'abracadabra')
+    /**
+     * Server constructor.
+     *
+     * @param string $host
+     * @param int $port
+     * @param int $workerCount
+     * @param bool $useSSL
+     */
+    public function __construct(string $host, int $port, int $workerCount = 4, $useSSL = false)
     {
         $this->host = $host;
         $this->port = $port;
+        $this->workerCount = $workerCount;
         $this->useSSL = $useSSL;
-        $this->cert = $cert;
-        $this->passPhrase = $passPhrase;
     }
 
+    /**
+     * Make server sockets
+     *
+     * @throws Exception
+     * @return void
+     */
     private function makeSocket(): void
     {
         if (file_exists(static::$connector)) {
@@ -57,7 +75,13 @@ class Server
         }
     }
 
-    private function spawn()
+    /**
+     * Spawning process to avoid system limits and increase performance
+     *
+     * @throws Exception
+     * @return array
+     */
+    private function spawn(): array
     {
         $pid = $master = null;
         $workers = [];
@@ -82,11 +106,52 @@ class Server
         return [$pid, $master, $workers];
     }
 
+    /**
+     * Class name for spawned workers
+     *
+     * @param string $handler
+     * @return Server
+     */
+    public function setHandler(string $handler): self
+    {
+        $this->handler = $handler;
+        return $this;
+    }
+
+    /**
+     * Path to PEM certificate
+     *
+     * @param string $cert
+     * @return Server
+     */
+    public function setCert(string $cert = '/etc/nginx/conf.d/wss.pem'): self
+    {
+        $this->cert = $cert;
+        return $this;
+    }
+
+    /**
+     * Pass phrase for PEM certificate
+     *
+     * @param string $passPhrase
+     * @return Server
+     */
+    public function setPassPhrase(string $passPhrase = 'abracadabra'): self
+    {
+        $this->passPhrase = $passPhrase;
+        return $this;
+    }
+
     public static function terminate(): void
     {
         static::$terminated = true;
     }
 
+    /**
+     * Launching server
+     *
+     * @return void
+     */
     public function run(): void
     {
         $this->makeSocket();
@@ -98,7 +163,7 @@ class Server
             (new Master($workers, $this->unixConnector))->dispatch();
         } else {
             fclose($this->unixConnector);
-            (new Worker($this->socket, $master))->handle();
+            (new $this->handler($this->socket, $master))->handle();
         }
     }
 }

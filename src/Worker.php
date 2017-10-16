@@ -2,13 +2,23 @@
 
 use \Exception;
 
-class Worker
+/**
+ * Class Worker
+ * @package Ollyxar\WebSockets
+ */
+abstract class Worker
 {
-    private $server;
-    private $master;
-    private $pid = 0;
-    private $clients = [];
+    protected $server;
+    protected $master;
+    protected $pid = 0;
+    protected $clients = [];
 
+    /**
+     * Worker constructor.
+     *
+     * @param $server
+     * @param $master
+     */
     public function __construct($server, $master)
     {
         $this->server = $server;
@@ -16,13 +26,30 @@ class Worker
         $this->pid = posix_getpid();
     }
 
-    private function sendMessage(string $msg): void
+    /**
+     * Sending message to all connected users
+     *
+     * @param string $msg
+     * @param bool $global
+     * @return void
+     */
+    protected function sendToAll(string $msg, bool $global = true): void
     {
         foreach ($this->clients as $client) {
             @fwrite($client, $msg);
         }
+
+        if ($global) {
+            fwrite($this->master, $msg);
+        }
     }
 
+    /**
+     * Performing handshake
+     *
+     * @param $socket
+     * @return bool
+     */
     private function handshake($socket): bool
     {
         $headers = [];
@@ -55,6 +82,52 @@ class Worker
         }
     }
 
+    /**
+     * Called when user successfully connected
+     *
+     * @param $client
+     * @return void
+     */
+    abstract protected function onConnect($client): void;
+
+    /**
+     * Called when user disconnected gracefully
+     *
+     * @param $clientNumber
+     * @return void
+     */
+    abstract protected function onClose($clientNumber): void;
+
+    /**
+     * This method called when user directly (from the browser) send a message
+     * Attention! Current method will retransmit data to the master. Because Master dispatching all messages
+     * and routing them to other processes. If you don't want to resend the data - overwrite this method
+     *
+     * @param string $message
+     * @return void
+     */
+    protected function onDirectMessage(string $message): void
+    {
+        $this->sendToAll(Frame::encode($message));
+    }
+
+    /**
+     * This method called when message received from the Master. It can be retransmitted message or message
+     * from Unix connector
+     *
+     * @param string $message
+     * @return void
+     */
+    protected function onFilteredMessage(string $message):void
+    {
+        $this->sendToAll(Frame::encode($message), false);
+    }
+
+    /**
+     * Handle connections
+     *
+     * @return void
+     */
     public function handle(): void
     {
         while (true) {
@@ -65,7 +138,6 @@ class Worker
 
             @stream_select($read, $write, $except, null);
 
-            /** New user connected */
             if (in_array($this->server, $read)) {
                 if ($client = @stream_socket_accept($this->server)) {
                     $this->clients[(int)$client] = $client;
@@ -73,50 +145,34 @@ class Worker
                         unset($this->clients[(int)$client]);
                         fclose($client);
                     } else {
-                        fwrite($client, Frame::encode(json_encode([
-                            'type'    => 'system',
-                            'message' => 'Connected.'
-                        ])));
+                        $this->onConnect($client);
                     }
                 }
 
                 unset($read[array_search($this->server, $read)]);
             }
 
-            /** Message from master */
             if (in_array($this->master, $read)) {
                 $data = Frame::decode($this->master);
 
                 if ($data['opcode'] == Frame::TEXT) {
-                    $this->sendMessage(Frame::encode($data['payload']));
+                    $this->onFilteredMessage($data['payload']);
                 }
 
                 unset($read[array_search($this->master, $read)]);
             }
 
-            /** Message from user */
             foreach ($read as $changedSocket) {
                 $data = Frame::decode($changedSocket);
 
                 if ($data['opcode'] == Frame::CLOSE) {
                     $socketPosition = array_search($changedSocket, $this->clients);
+                    $this->onClose($socketPosition);
                     unset($this->clients[$socketPosition]);
                 }
 
                 if ($data['opcode'] == Frame::TEXT) {
-                    $receivedText = $data['payload'];
-                    $message = json_decode($receivedText);
-                    $userName = $message->name;
-                    $userMessage = $message->message;
-
-                    $response = Frame::encode(json_encode([
-                        'type'    => 'usermsg',
-                        'name'    => $userName,
-                        'message' => $userMessage
-                    ]));
-
-                    $this->sendMessage($response);
-                    fwrite($this->master, $response);
+                    $this->onDirectMessage($data['payload']);
                 }
                 break;
             }

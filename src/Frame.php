@@ -1,5 +1,9 @@
 <?php namespace Ollyxar\WebSockets;
 
+/**
+ * Class Frame
+ * @package Ollyxar\WebSockets
+ */
 class Frame
 {
     public const TEXT = 0x1;
@@ -8,6 +12,11 @@ class Frame
     public const PING = 0x9;
     public const PONG = 0xa;
 
+    /**
+     * @param $message
+     * @param int $opCode
+     * @return string
+     */
     public static function encode($message, $opCode = Frame::TEXT): string
     {
         $rsv1 = 0x0;
@@ -29,6 +38,10 @@ class Frame
         return $out . $message;
     }
 
+    /**
+     * @param $socket
+     * @return array
+     */
     public static function decode($socket): array
     {
         if (!$socket || !is_resource($socket)) {
