@@ -4,15 +4,15 @@ use \Exception;
 
 class Server
 {
-    private $host = '0.0.0.0';
-    private $port = 2083;
-    private $useSSL = false;
-    private $cert;
-    private $passPhrase;
     private $socket;
     private $unixConnector;
     private static $terminated = false;
-    private $workerCount = 4;
+    protected $host = '0.0.0.0';
+    protected $port = 2083;
+    protected $useSSL = false;
+    protected $cert;
+    protected $passPhrase;
+    protected $workerCount = 4;
     public static $connector = 'unix:///var/run/wsc.sock';
 
     public function __construct($host, $port, $useSSL = false, $cert = '/etc/nginx/conf.d/wss.pem', $passPhrase = 'abracadabra')
@@ -31,10 +31,6 @@ class Server
         }
 
         if ($this->useSSL) {
-            if (!file_exists($this->cert)) {
-                Ssl::generateCert($this->cert, $this->passPhrase);
-            }
-
             $context = stream_context_create([
                 'ssl' => [
                     'local_cert'        => $this->cert,
