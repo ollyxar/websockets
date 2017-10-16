@@ -3,6 +3,7 @@
 Simple and multifunctional PHP WebSocket server
 
 ####Live chat example
+
 ![chat](https://i.imgur.com/7M9LhTD.jpg)
 
 ## Installing WebSockets
@@ -99,4 +100,22 @@ class MyHandler extends Handler
     ->setPassPhrase()
     ->setHandler(MyHandler::class)
     ->run();
+```
+
+### Communicate with server outside the wss protocol
+
+```php
+use Ollyxar\WebSockets\Server as WServer;
+use Ollyxar\WebSockets\Frame;
+
+$socket = socket_create(AF_UNIX, SOCK_STREAM, 0);
+socket_connect($socket, WServer::$connector);
+
+$data = new stdClass();
+$data->type = 'system';
+$data->message = 'hello World!';
+$msg = Frame::encode(json_encode($data));
+
+socket_write($socket, $msg);
+socket_close($socket);
 ```
