@@ -24,30 +24,6 @@ class Server
         $this->passPhrase = $passPhrase;
     }
 
-    private function generateCert(string $pemPassPhrase): void
-    {
-        $certificateData = [
-            "countryName"            => "UA",
-            "stateOrProvinceName"    => "Kyiv",
-            "localityName"           => "Kyiv",
-            "organizationName"       => "customwebsite.com",
-            "organizationalUnitName" => "customname",
-            "commonName"             => "commoncustomname",
-            "emailAddress"           => "custom@email.com"
-        ];
-
-        $privateKey = openssl_pkey_new();
-        $certificate = openssl_csr_new($certificateData, $privateKey);
-        $certificate = openssl_csr_sign($certificate, null, $privateKey, 365);
-
-        $pem = [];
-        openssl_x509_export($certificate, $pem[0]);
-        openssl_pkey_export($privateKey, $pem[1], $pemPassPhrase);
-        $pem = implode($pem);
-
-        file_put_contents($this->cert, $pem);
-    }
-
     private function makeSocket(): void
     {
         if (file_exists(substr(static::$connector, 7))) {
@@ -56,7 +32,7 @@ class Server
 
         if ($this->useSSL) {
             if (!file_exists($this->cert)) {
-                $this->generateCert($this->passPhrase);
+                Ssl::generateCert($this->cert, $this->passPhrase);
             }
 
             $context = stream_context_create([
