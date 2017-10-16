@@ -10,7 +10,6 @@ class Server
 {
     private $socket;
     private $unixConnector;
-    private static $terminated = false;
     protected $host = '0.0.0.0';
     protected $port = 2083;
     protected $useSSL = false;
@@ -140,11 +139,6 @@ class Server
     {
         $this->passPhrase = $passPhrase;
         return $this;
-    }
-
-    public static function terminate(): void
-    {
-        static::$terminated = true;
     }
 
     /**
