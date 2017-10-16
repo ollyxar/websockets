@@ -2,7 +2,7 @@
 
 Simple and multifunctional PHP WebSocket server
 
-####Live chat example
+#### Live chat example
 
 ![chat](https://i.imgur.com/7M9LhTD.jpg)
 
