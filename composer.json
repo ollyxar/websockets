@@ -1,0 +1,38 @@
+{
+  "name": "ollyxar/websockets",
+  "type": "library",
+  "description": "PHP WebSocket server",
+  "keywords": [
+    "framework",
+    "unix",
+    "web sockets",
+    "php",
+    "library",
+    "WebSocket server"
+  ],
+  "homepage": "https://ollyxar.com/websockets",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Oleksii Svyrydenko",
+      "email": "alexslipknot@europe.com",
+      "homepage": "https://ollyxar.com/"
+    }
+  ],
+  "require": {
+    "php": ">=7.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Ollyxar\\": "src/"
+    }
+  },
+  "suggest": {
+    "psr/log": "Required for using the Log middleware"
+  },
+  "extra": {
+    "branch-alias": {
+      "dev-master": "6.2-dev"
+    }
+  }
+}
