@@ -24,7 +24,7 @@
   },
   "autoload": {
     "psr-4": {
-      "Ollyxar\\": "src/"
+      "Ollyxar\\WebSockets\\": "src/"
     }
   }
 }
