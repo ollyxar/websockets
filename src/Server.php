@@ -13,7 +13,7 @@ class Server
     protected $cert;
     protected $passPhrase;
     protected $workerCount = 4;
-    public static $connector = 'unix:///var/run/wsc.sock';
+    public static $connector = '/var/run/wsc.sock';
 
     public function __construct($host, $port, $useSSL = false, $cert = '/etc/nginx/conf.d/wss.pem', $passPhrase = 'abracadabra')
     {
@@ -26,8 +26,8 @@ class Server
 
     private function makeSocket(): void
     {
-        if (file_exists(substr(static::$connector, 7))) {
-            unlink(substr(static::$connector, 7));
+        if (file_exists(static::$connector)) {
+            unlink(static::$connector);
         }
 
         if ($this->useSSL) {
@@ -50,7 +50,7 @@ class Server
 
         $this->socket = stream_socket_server("$protocol://{$this->host}:{$this->port}", $errorNumber, $errorString, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
 
-        $this->unixConnector = stream_socket_server(static::$connector, $errorNumber, $errorString, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
+        $this->unixConnector = stream_socket_server('unix://' . static::$connector, $errorNumber, $errorString, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
 
         if (!$this->socket) {
             throw new Exception($errorString, $errorNumber);

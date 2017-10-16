@@ -23,12 +23,11 @@ class Master
             foreach ($read as $client) {
                 if ($client === $this->connector) {
                     $client = @stream_socket_accept($client);
-                    $data = Frame::encode(fread($client, 4096));
-                } else {
-                    $data = fread($client, 4096);
                 }
 
-                if (!strlen($data)) {
+                $data = Frame::decode($client);
+
+                if (!$data) {
                     unset($this->clients[(int)$client]);
                     fclose($client);
                     continue;
@@ -36,7 +35,7 @@ class Master
 
                 foreach ($this->workers as $worker) {
                     if ($worker !== $client) {
-                        fwrite($worker, $data);
+                        fwrite($worker, Frame::encode($data['payload'], $data['opcode']));
                     }
                 }
             }

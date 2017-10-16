@@ -116,7 +116,7 @@ class Frame
         $maskN = array_map('ord', str_split(fread($socket, 4)));
         $maskC = 0;
 
-        $bufferLength = 3000;
+        $bufferLength = 1024;
         $message = null;
 
         for ($i = 0; $i < $length; $i += $bufferLength) {
