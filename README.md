@@ -58,7 +58,7 @@ class MyHandler extends Handler
     {
         $this->sendToAll(WFrame::encode(json_encode([
             'type'    => 'system',
-            'message' => 'User {' . (int)$client . ') Connected.'
+            'message' => 'User {' . (int)$client . '} Connected.'
         ])));
     }
 
