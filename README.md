@@ -1,6 +1,6 @@
 # PHP WebSocket server
 
-[![Build Status](https://travis-ci.org/ollyxar/websockets.svg?branch=master)](https://travis-ci.org/ollyxar/PurePlayer)
+[![Build Status](https://travis-ci.org/ollyxar/websockets.svg?branch=master)](https://travis-ci.org/ollyxar/websockets)
 ![Version](https://poser.pugx.org/ollyxar/websockets/v/stable.svg)
 ![Downloads](https://poser.pugx.org/ollyxar/websockets/d/total.svg)
 ![License](https://poser.pugx.org/ollyxar/websockets/license.svg)
