@@ -1,0 +1,13 @@
+language: php
+
+sudo: false
+
+php:
+  - 7.0
+  - 7.1
+
+before_script:
+  - curl --version
+  - composer install --no-interaction --prefer-source --dev
+
+script: vendor/bin/phpunit
