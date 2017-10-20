@@ -76,7 +76,7 @@ abstract class Worker
 
         try {
             fwrite($socket, $response);
-            return $this->afterHandshake($headers);
+            return $this->afterHandshake($headers, $socket);
         } catch (Exception $e) {
             return false;
         }
@@ -86,9 +86,10 @@ abstract class Worker
      * Process headers after handshake success
      *
      * @param array $headers
+     * @param $socket
      * @return bool
      */
-    protected function afterHandshake(array $headers): bool
+    protected function afterHandshake(array $headers, $socket): bool
     {
         return true;
     }
