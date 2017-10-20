@@ -76,12 +76,23 @@ abstract class Worker
 
         try {
             fwrite($socket, $response);
-            return true;
+            return $this->afterHandshake($headers);
         } catch (Exception $e) {
             return false;
         }
     }
 
+    /**
+     * Process headers after handshake success
+     *
+     * @param array $headers
+     * @return bool
+     */
+    protected function afterHandshake(array $headers): bool
+    {
+        return true;
+    }
+    
     /**
      * Called when user successfully connected
      *
