@@ -116,9 +116,10 @@ abstract class Worker
      * and routing them to other processes. If you don't want to resend the data - overwrite this method
      *
      * @param string $message
+     * @param int $socketId
      * @return void
      */
-    protected function onDirectMessage(string $message): void
+    protected function onDirectMessage(string $message, int $socketId): void
     {
         $this->sendToAll(Frame::encode($message));
     }
@@ -184,7 +185,7 @@ abstract class Worker
                 }
 
                 if ($data['opcode'] == Frame::TEXT) {
-                    $this->onDirectMessage($data['payload']);
+                    $this->onDirectMessage($data['payload'], (int)$changedSocket);
                 }
                 break;
             }
