@@ -33,7 +33,9 @@ class Master
             $read = $this->clients;
             $read[] = $this->connector;
 
-            @stream_select($read, $write, $except, null);
+            if (!@stream_select($read, $write, $except, null)) {
+                continue;
+            }
 
             foreach ($read as $client) {
                 if ($client === $this->connector) {
@@ -42,9 +44,9 @@ class Master
 
                 $data = Frame::decode($client);
 
-                if (!$data) {
+                if (!$data['opcode']) {
                     unset($this->clients[(int)$client]);
-                    fclose($client);
+                    @fclose($client);
                     continue;
                 }
 

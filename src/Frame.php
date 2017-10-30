@@ -114,12 +114,17 @@ class Frame
 
         if ($out['mask'] === 0x0) {
             $msg = '';
-            $read_length = 0;
+            $readLength = 0;
 
-            while ($read_length < $length) {
-                $to_read = $length - $read_length;
-                $msg .= fread($socket, $to_read);
-                $read_length = strlen($msg);
+            while ($readLength < $length) {
+                $toRead = $length - $readLength;
+                $msg .= fread($socket, $toRead);
+
+                if ($readLength === strlen($msg)) {
+                    break;
+                }
+
+                $readLength = strlen($msg);
             }
 
             $out['payload'] = $msg;
@@ -130,7 +135,7 @@ class Frame
         $maskC = 0;
 
         $bufferLength = 1024;
-        $message = null;
+        $message = '';
 
         for ($i = 0; $i < $length; $i += $bufferLength) {
             $buffer = min($bufferLength, $length - $i);

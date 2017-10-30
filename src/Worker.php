@@ -93,7 +93,7 @@ abstract class Worker
     {
         return true;
     }
-    
+
     /**
      * Called when user successfully connected
      *
@@ -147,7 +147,6 @@ abstract class Worker
             $read = $this->clients;
             $read[] = $this->server;
             $read[] = $this->master;
-            $write = [];
 
             @stream_select($read, $write, $except, null);
 
@@ -179,14 +178,18 @@ abstract class Worker
                 $data = Frame::decode($changedSocket);
 
                 if ($data['opcode'] == Frame::CLOSE) {
-                    $socketPosition = array_search($changedSocket, $this->clients);
-                    $this->onClose($socketPosition);
-                    unset($this->clients[$socketPosition]);
+                    $this->onClose((int)$changedSocket);
+                    unset($this->clients[(int)$changedSocket]);
+                }
+
+                if ($data['opcode'] == Frame::PING) {
+                    fwrite($changedSocket, Frame::encode('', Frame::PONG));
                 }
 
                 if ($data['opcode'] == Frame::TEXT) {
                     $this->onDirectMessage($data['payload'], (int)$changedSocket);
                 }
+
                 break;
             }
         }

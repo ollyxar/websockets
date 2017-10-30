@@ -68,6 +68,7 @@ class Server
         $this->socket = stream_socket_server("$protocol://{$this->host}:{$this->port}", $errorNumber, $errorString, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
 
         $this->unixConnector = stream_socket_server('unix://' . static::$connector, $errorNumber, $errorString, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
+        chmod(static::$connector, 0777);
 
         if (!$this->socket) {
             throw new Exception($errorString, $errorNumber);
