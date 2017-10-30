@@ -131,7 +131,7 @@ abstract class Worker
      * @param string $message
      * @return void
      */
-    protected function onFilteredMessage(string $message):void
+    protected function onFilteredMessage(string $message): void
     {
         $this->sendToAll(Frame::encode($message), false);
     }
@@ -189,8 +189,6 @@ abstract class Worker
                 if ($data['opcode'] == Frame::TEXT) {
                     $this->onDirectMessage($data['payload'], (int)$changedSocket);
                 }
-
-                break;
             }
         }
     }
