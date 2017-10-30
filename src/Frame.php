@@ -46,7 +46,8 @@ class Frame
     {
         if (!$socket || !is_resource($socket)) {
             return [
-                'opcode' => static::CLOSE
+                'opcode'  => static::CLOSE,
+                'payload' => ''
             ];
         }
 
@@ -55,7 +56,8 @@ class Frame
 
         if (empty($read)) {
             return [
-                'opcode' => static::CLOSE
+                'opcode'  => static::CLOSE,
+                'payload' => ''
             ];
         }
 
