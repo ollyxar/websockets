@@ -103,7 +103,7 @@ class Frame
             $length = $handle['l'];
         } elseif ($length === 0x7f) {
             $handle = unpack('N*l', fread($socket, 8));
-            $length = $handle['l2'];
+            $length = isset($handle['l2']) ? $handle['l2'] : $length;
 
             if ($length > 0x7fffffffffffffff) {
                 return [
