@@ -52,7 +52,7 @@ class Master
 
                 foreach ($this->workers as $worker) {
                     if ($worker !== $client) {
-                        fwrite($worker, Frame::encode($data['payload'], $data['opcode']));
+                        @fwrite($worker, Frame::encode($data['payload'], $data['opcode']));
                     }
                 }
             }
