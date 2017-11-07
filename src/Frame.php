@@ -52,7 +52,7 @@ class Frame
         }
 
         $out = [];
-        $read = fread($socket, 1);
+        $read = @fread($socket, 1);
 
         if (empty($read)) {
             return [

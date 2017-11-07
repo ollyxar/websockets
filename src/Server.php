@@ -151,7 +151,7 @@ class Server
     {
         $this->makeSocket();
 
-        list($pid, $master, $workers) = $this->spawn();
+        [$pid, $master, $workers] = $this->spawn();
 
         if ($pid) {
             fclose($this->socket);

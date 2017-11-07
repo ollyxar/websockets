@@ -7,6 +7,8 @@
 
 Simple and multifunctional PHP WebSocket server
 
+![ollyxar websockets](https://ollyxar.com/img/blog/ows.png)
+
 #### Live chat example
 
 ![chat](https://i.imgur.com/7M9LhTD.jpg)

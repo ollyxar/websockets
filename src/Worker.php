@@ -183,7 +183,7 @@ abstract class Worker
                 }
 
                 if ($data['opcode'] == Frame::PING) {
-                    fwrite($changedSocket, Frame::encode('', Frame::PONG));
+                    @fwrite($changedSocket, Frame::encode('', Frame::PONG));
                 }
 
                 if ($data['opcode'] == Frame::TEXT) {
