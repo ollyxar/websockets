@@ -45,8 +45,6 @@ class Master
                 $data = Frame::decode($client);
 
                 if (!$data['opcode']) {
-                    unset($this->clients[(int)$client]);
-                    @fclose($client);
                     continue;
                 }
 
