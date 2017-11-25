@@ -7,7 +7,6 @@
 class Master
 {
     private $workers = [];
-    private $clients = [];
     private $connector;
 
     /**
@@ -18,7 +17,7 @@ class Master
      */
     public function __construct($workers, $connector)
     {
-        $this->clients = $this->workers = $workers;
+        $this->workers = $workers;
         $this->connector = $connector;
     }
 
@@ -30,12 +29,10 @@ class Master
     public function dispatch(): void
     {
         while (true) {
-            $read = $this->clients;
+            $read = $this->workers;
             $read[] = $this->connector;
 
-            if (!@stream_select($read, $write, $except, null)) {
-                continue;
-            }
+            @stream_select($read, $write, $except, null);
 
             foreach ($read as $client) {
                 if ($client === $this->connector) {

@@ -35,8 +35,10 @@ abstract class Worker
      */
     protected function sendToAll(string $msg, bool $global = true): void
     {
-        foreach ($this->clients as $client) {
-            @fwrite($client, $msg);
+        if (!empty($this->clients) && stream_select($read, $this->clients, $except, 0)) {
+            foreach ($this->clients as $client) {
+                @fwrite($client, $msg);
+            }
         }
 
         if ($global) {
