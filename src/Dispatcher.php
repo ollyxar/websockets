@@ -59,7 +59,7 @@ final class Dispatcher
         }
 
         foreach ($read as $socket) {
-            list(, $jobs) = $this->read[(int)$socket];
+            $jobs = $this->read[(int)$socket][1];
             unset($this->read[(int)$socket]);
 
             foreach ($jobs as $job) {
@@ -68,7 +68,7 @@ final class Dispatcher
         }
 
         foreach ($write as $socket) {
-            list(, $jobs) = $this->write[(int)$socket];
+            $jobs = $this->write[(int)$socket][1];
             unset($this->write[(int)$socket]);
 
             foreach ($jobs as $job) {
@@ -140,9 +140,14 @@ final class Dispatcher
         return $this;
     }
 
-    public static function make(Generator $process) {
+    /**
+     * @param Generator $process
+     * @return SysCall
+     */
+    public static function make(Generator $process): SysCall
+    {
         return new SysCall(
-            function(Job $job, Dispatcher $dispatcher) use ($process) {
+            function (Job $job, Dispatcher $dispatcher) use ($process) {
                 $job->value($dispatcher->add($process));
                 $dispatcher->enqueue($job);
             }
@@ -153,10 +158,10 @@ final class Dispatcher
      * @param $socket
      * @return SysCall
      */
-    public static function listenRead($socket)
+    public static function listenRead($socket): SysCall
     {
         return new SysCall(
-            function(Job $job, Dispatcher $dispatcher) use ($socket) {
+            function (Job $job, Dispatcher $dispatcher) use ($socket) {
                 $dispatcher->appendRead($socket, $job);
             }
         );
@@ -166,10 +171,10 @@ final class Dispatcher
      * @param $socket
      * @return SysCall
      */
-    public static function listenWrite($socket)
+    public static function listenWrite($socket): SysCall
     {
         return new SysCall(
-            function(Job $job, Dispatcher $dispatcher) use ($socket) {
+            function (Job $job, Dispatcher $dispatcher) use ($socket) {
                 $dispatcher->appendWrite($socket, $job);
             }
         );

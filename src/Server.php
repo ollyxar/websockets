@@ -1,6 +1,6 @@
 <?php namespace Ollyxar\WebSockets;
 
-use \Exception;
+use Exception;
 
 /**
  * Class Server
@@ -146,6 +146,7 @@ class Server
      * Launching server
      *
      * @return void
+     * @throws Exception
      */
     public function run(): void
     {

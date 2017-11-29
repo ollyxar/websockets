@@ -38,11 +38,12 @@ require 'vendor/autoload.php';
 ## Simple WebSocket server
 
 ```php
+use Generator;
+use Ollyxar\LaravelAuth\FileAuth;
 use Ollyxar\WebSockets\{
-    Server as WServer,
-    Ssl as Wsl,
-    Worker as Handler,
-    Frame as WFrame
+    Frame,
+    Worker,
+    Dispatcher
 };
 
 class MyHandler extends Handler
@@ -60,30 +61,32 @@ class MyHandler extends Handler
 
     /**
      * @param $client
+     * @return Generator
      */
-    protected function onConnect($client): void
+    protected function onConnect($client): Generator
     {
-        $this->sendToAll(WFrame::encode(json_encode([
+        yield Dispatcher::make($this->sendToAll(WFrame::encode(json_encode([
             'type'    => 'system',
             'message' => 'User {' . (int)$client . '} Connected.'
-        ])));
+        ]))));
     }
 
     /**
      * @param $clientNumber
      */
-    protected function onClose($clientNumber): void
+    protected function onClose($clientNumber): Generator
     {
-        $this->sendToAll(WFrame::encode(json_encode([
+        yield Dispatcher::make($this->sendToAll(WFrame::encode(json_encode([
             'type'    => 'system',
             'message' => "User {$clientNumber} disconnected."
-        ])));
+        ]))));
     }
 
     /**
      * @param string $message
+     * @return Generator
      */
-    protected function onDirectMessage(string $message): void
+    protected function onDirectMessage(string $message): Generator
     {
         $message = json_decode($message);
         $userName = $message->name;
@@ -95,7 +98,7 @@ class MyHandler extends Handler
             'message' => $userMessage
         ]));
 
-        $this->sendToAll($response);
+        yield Dispatcher::make($this->sendToAll($response));
     }
 }
 

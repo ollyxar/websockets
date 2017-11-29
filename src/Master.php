@@ -8,7 +8,14 @@ use Generator;
  */
 final class Master
 {
+    /**
+     * @var array
+     */
     private $workers = [];
+
+    /**
+     * Unix socket connector
+     */
     private $connector;
 
     /**
@@ -25,6 +32,30 @@ final class Master
 
     /**
      * @param $client
+     * @return Generator
+     */
+    protected function read($client): Generator
+    {
+        yield Dispatcher::listenRead($client);
+
+        $data = Frame::decode($client);
+
+        if (!$data['opcode']) {
+            return yield;
+        }
+
+        foreach ($this->workers as $worker) {
+            if ($worker !== $client) {
+                yield Dispatcher::listenWrite($worker);
+                yield Dispatcher::make($this->write($worker, Frame::encode($data['payload'], $data['opcode'])));
+            }
+        }
+
+        yield Dispatcher::make($this->read($client));
+    }
+
+    /**
+     * @param $client
      * @param $data
      * @return Generator
      */
@@ -34,36 +65,13 @@ final class Master
         fwrite($client, $data);
     }
 
-    protected function listenWorker($socket): Generator
-    {
-        yield Dispatcher::listenRead($socket);
-        yield Dispatcher::listenWrite($socket);
-
-        $data = Frame::decode($socket);
-
-        if (!$data['opcode']) {
-            return yield;
-        }
-
-        stream_select($read, $this->workers, $except, 0);
-
-        foreach ($this->workers as $worker) {
-            if ($worker !== $socket) {
-                dump('sending to worker # '.(int)$worker);
-                yield Dispatcher::make($this->write($worker, Frame::encode($data['payload'], $data['opcode'])));
-            }
-        }
-    }
-
     /**
      * @return Generator
      */
     protected function listenWorkers(): Generator
     {
-        while (true) {
-            foreach ($this->workers as $worker) {
-                yield Dispatcher::make($this->listenWorker($worker));
-            }
+        foreach ($this->workers as $worker) {
+            yield Dispatcher::make($this->read($worker));
         }
     }
 
@@ -83,6 +91,7 @@ final class Master
                 }
 
                 foreach ($this->workers as $worker) {
+                    yield Dispatcher::listenWrite($worker);
                     yield Dispatcher::make($this->write($worker, Frame::encode($data['payload'], $data['opcode'])));
                 }
             }
@@ -98,7 +107,7 @@ final class Master
     {
         (new Dispatcher())
             ->add($this->listenConnector())
-            //->add($this->listenWorkers())
+            ->add($this->listenWorkers())
             ->dispatch();
     }
 }

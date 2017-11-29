@@ -98,6 +98,7 @@ abstract class Worker
             case Frame::CLOSE: {
                 yield Dispatcher::make($this->onClose((int)$client));
                 unset($this->clients[(int)$client]);
+                fclose($client);
                 break;
             }
             case Frame::PING: {
@@ -138,7 +139,7 @@ abstract class Worker
             fclose($client);
         } else {
             $this->clients[(int)$client] = $client;
-            $this->onConnect($client);
+            yield Dispatcher::make($this->onConnect($client));
 
             yield Dispatcher::make($this->read($client));
         }
