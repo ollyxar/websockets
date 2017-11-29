@@ -1,10 +1,12 @@
 <?php namespace Ollyxar\WebSockets;
 
+use Generator;
+
 /**
  * Class Master
  * @package Ollyxar\WebSockets
  */
-class Master
+final class Master
 {
     private $workers = [];
     private $connector;
@@ -22,35 +24,81 @@ class Master
     }
 
     /**
-     * Dispatch messaging
-     *
-     * @return void
+     * @param $client
+     * @param $data
+     * @return Generator
      */
-    public function dispatch(): void
+    protected function write($client, $data): Generator
+    {
+        yield Dispatcher::listenWrite($client);
+        fwrite($client, $data);
+    }
+
+    protected function listenWorker($socket): Generator
+    {
+        yield Dispatcher::listenRead($socket);
+        yield Dispatcher::listenWrite($socket);
+
+        $data = Frame::decode($socket);
+
+        if (!$data['opcode']) {
+            return yield;
+        }
+
+        stream_select($read, $this->workers, $except, 0);
+
+        foreach ($this->workers as $worker) {
+            if ($worker !== $socket) {
+                dump('sending to worker # '.(int)$worker);
+                yield Dispatcher::make($this->write($worker, Frame::encode($data['payload'], $data['opcode'])));
+            }
+        }
+    }
+
+    /**
+     * @return Generator
+     */
+    protected function listenWorkers(): Generator
     {
         while (true) {
-            $read = $this->workers;
-            $read[] = $this->connector;
+            foreach ($this->workers as $worker) {
+                yield Dispatcher::make($this->listenWorker($worker));
+            }
+        }
+    }
 
-            @stream_select($read, $write, $except, null);
+    /**
+     * @return Generator
+     */
+    protected function listenConnector(): Generator
+    {
+        while (true) {
+            yield Dispatcher::listenRead($this->connector);
 
-            foreach ($read as $client) {
-                if ($client === $this->connector) {
-                    $client = @stream_socket_accept($client);
-                }
-
-                $data = Frame::decode($client);
+            if ($socket = @stream_socket_accept($this->connector)) {
+                $data = Frame::decode($socket);
 
                 if (!$data['opcode']) {
                     continue;
                 }
 
                 foreach ($this->workers as $worker) {
-                    if ($worker !== $client) {
-                        @fwrite($worker, Frame::encode($data['payload'], $data['opcode']));
-                    }
+                    yield Dispatcher::make($this->write($worker, Frame::encode($data['payload'], $data['opcode'])));
                 }
             }
         }
+    }
+
+    /**
+     * Dispatch messaging
+     *
+     * @return void
+     */
+    public function dispatch(): void
+    {
+        (new Dispatcher())
+            ->add($this->listenConnector())
+            //->add($this->listenWorkers())
+            ->dispatch();
     }
 }

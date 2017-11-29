@@ -1,6 +1,7 @@
 <?php namespace Ollyxar\WebSockets;
 
-use \Exception;
+use Exception;
+use Generator;
 
 /**
  * Class Worker
@@ -31,18 +32,16 @@ abstract class Worker
      *
      * @param string $msg
      * @param bool $global
-     * @return void
+     * @return Generator
      */
-    protected function sendToAll(string $msg, bool $global = true): void
+    protected function sendToAll(string $msg, bool $global = true): Generator
     {
-        if (!empty($this->clients) && stream_select($read, $this->clients, $except, 0)) {
-            foreach ($this->clients as $client) {
-                @fwrite($client, $msg);
-            }
+        foreach ($this->clients as $client) {
+            yield Dispatcher::make($this->write($client, $msg));
         }
 
         if ($global) {
-            fwrite($this->master, $msg);
+            yield Dispatcher::make($this->write($this->master, $msg));
         }
     }
 
@@ -85,6 +84,98 @@ abstract class Worker
     }
 
     /**
+     * @param $client
+     * @return Generator
+     */
+    protected function read($client): Generator
+    {
+        yield Dispatcher::listenRead($client);
+        yield Dispatcher::listenWrite($client);
+
+        $data = Frame::decode($client);
+
+        switch ($data['opcode']) {
+            case Frame::CLOSE: {
+                yield Dispatcher::make($this->onClose((int)$client));
+                unset($this->clients[(int)$client]);
+                break;
+            }
+            case Frame::PING: {
+                yield Dispatcher::make($this->write($client, Frame::encode('', Frame::PONG)));
+                break;
+            }
+            case Frame::TEXT: {
+                yield Dispatcher::make($this->onDirectMessage($data['payload'], (int)$client));
+                break;
+            }
+        }
+
+        yield Dispatcher::make($this->read($client));
+    }
+
+    /**
+     * @param $client
+     * @param $data
+     * @return Generator
+     */
+    protected function write($client, $data): Generator
+    {
+        yield Dispatcher::listenWrite($client);
+        @fwrite($client, $data);
+    }
+
+    /**
+     * @param $client
+     * @return Generator
+     */
+    protected function accept($client): Generator
+    {
+        yield Dispatcher::listenRead($client);
+        yield Dispatcher::listenWrite($client);
+
+        if (!$this->handshake($client)) {
+            unset($this->clients[(int)$client]);
+            fclose($client);
+        } else {
+            $this->clients[(int)$client] = $client;
+            $this->onConnect($client);
+
+            yield Dispatcher::make($this->read($client));
+        }
+    }
+
+    /**
+     * @return Generator
+     */
+    protected function listerMaster(): Generator
+    {
+        while (true) {
+            yield Dispatcher::listenRead($this->master);
+            $data = Frame::decode($this->master);
+
+            if ($data['opcode'] == Frame::TEXT) {
+                yield Dispatcher::make($this->onFilteredMessage($data['payload']));
+            }
+        }
+    }
+
+    /**
+     * Main socket listener
+     *
+     * @return Generator
+     */
+    protected function listenSocket(): Generator
+    {
+        while (true) {
+            yield Dispatcher::listenRead($this->server);
+
+            if ($client = @stream_socket_accept($this->server)) {
+                yield Dispatcher::make($this->accept($client));
+            }
+        }
+    }
+
+    /**
      * Process headers after handshake success
      *
      * @param array $headers
@@ -100,17 +191,17 @@ abstract class Worker
      * Called when user successfully connected
      *
      * @param $client
-     * @return void
+     * @return Generator
      */
-    abstract protected function onConnect($client): void;
+    abstract protected function onConnect($client): Generator;
 
     /**
      * Called when user disconnected gracefully
      *
      * @param $clientNumber
-     * @return void
+     * @return Generator
      */
-    abstract protected function onClose($clientNumber): void;
+    abstract protected function onClose($clientNumber): Generator;
 
     /**
      * This method called when user directly (from the browser) send a message
@@ -119,11 +210,11 @@ abstract class Worker
      *
      * @param string $message
      * @param int $socketId
-     * @return void
+     * @return Generator
      */
-    protected function onDirectMessage(string $message, int $socketId): void
+    protected function onDirectMessage(string $message, int $socketId): Generator
     {
-        $this->sendToAll(Frame::encode($message));
+        yield Dispatcher::make($this->sendToAll(Frame::encode($message)));
     }
 
     /**
@@ -131,11 +222,11 @@ abstract class Worker
      * from Unix connector
      *
      * @param string $message
-     * @return void
+     * @return Generator
      */
-    protected function onFilteredMessage(string $message): void
+    protected function onFilteredMessage(string $message): Generator
     {
-        $this->sendToAll(Frame::encode($message), false);
+        yield Dispatcher::make($this->sendToAll(Frame::encode($message), false));
     }
 
     /**
@@ -143,55 +234,11 @@ abstract class Worker
      *
      * @return void
      */
-    public function handle(): void
+    final public function handle(): void
     {
-        while (true) {
-            $read = $this->clients;
-            $read[] = $this->server;
-            $read[] = $this->master;
-
-            @stream_select($read, $write, $except, null);
-
-            if (in_array($this->server, $read)) {
-                if ($client = @stream_socket_accept($this->server)) {
-                    $this->clients[(int)$client] = $client;
-                    if (!$this->handshake($client)) {
-                        unset($this->clients[(int)$client]);
-                        fclose($client);
-                    } else {
-                        $this->onConnect($client);
-                    }
-                }
-
-                unset($read[array_search($this->server, $read)]);
-            }
-
-            if (in_array($this->master, $read)) {
-                $data = Frame::decode($this->master);
-
-                if ($data['opcode'] == Frame::TEXT) {
-                    $this->onFilteredMessage($data['payload']);
-                }
-
-                unset($read[array_search($this->master, $read)]);
-            }
-
-            foreach ($read as $changedSocket) {
-                $data = Frame::decode($changedSocket);
-
-                if ($data['opcode'] == Frame::CLOSE) {
-                    $this->onClose((int)$changedSocket);
-                    unset($this->clients[(int)$changedSocket]);
-                }
-
-                if ($data['opcode'] == Frame::PING) {
-                    @fwrite($changedSocket, Frame::encode('', Frame::PONG));
-                }
-
-                if ($data['opcode'] == Frame::TEXT) {
-                    $this->onDirectMessage($data['payload'], (int)$changedSocket);
-                }
-            }
-        }
+        (new Dispatcher())
+            ->add($this->listerMaster())
+            ->add($this->listenSocket())
+            ->dispatch();
     }
 }
