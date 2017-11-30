@@ -38,6 +38,7 @@ final class Master
     {
         yield Dispatcher::listenRead($client);
 
+        Logger::log('master', posix_getpid(), 'data received from worker', (int)$client);
         $data = Frame::decode($client);
 
         if (!$data['opcode']) {
@@ -46,6 +47,8 @@ final class Master
 
         foreach ($this->workers as $worker) {
             if ($worker !== $client) {
+                Logger::log('master', posix_getpid(), 'write to worker', (int)$worker);
+
                 yield Dispatcher::listenWrite($worker);
                 yield Dispatcher::make($this->write($worker, Frame::encode($data['payload'], $data['opcode'])));
             }
@@ -61,6 +64,8 @@ final class Master
      */
     protected function write($client, $data): Generator
     {
+        Logger::log('master', posix_getpid(), 'fwrite to ' . (int)$client, $data);
+
         yield Dispatcher::listenWrite($client);
         fwrite($client, $data);
     }
@@ -84,11 +89,14 @@ final class Master
             yield Dispatcher::listenRead($this->connector);
 
             if ($socket = @stream_socket_accept($this->connector)) {
+                Logger::log('master', posix_getpid(), 'connector accepted');
                 $data = Frame::decode($socket);
 
                 if (!$data['opcode']) {
                     continue;
                 }
+
+                Logger::log('master', posix_getpid(), 'connector data:', $data['payload']);
 
                 foreach ($this->workers as $worker) {
                     yield Dispatcher::listenWrite($worker);

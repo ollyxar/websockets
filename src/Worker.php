@@ -36,6 +36,8 @@ abstract class Worker
      */
     protected function sendToAll(string $msg, bool $global = true): Generator
     {
+        Logger::log('worker', $this->pid, 'send to all: ', $msg);
+
         foreach ($this->clients as $client) {
             yield Dispatcher::make($this->write($client, $msg));
         }
@@ -53,6 +55,7 @@ abstract class Worker
      */
     private function handshake($socket): bool
     {
+        Logger::log('worker', $this->pid, 'handshake for ', (int)$socket);
         $headers = [];
         $lines = preg_split("/\r\n/", @fread($socket, 4096));
 
@@ -75,6 +78,8 @@ abstract class Worker
             "Connection: Upgrade\n" .
             "Sec-WebSocket-Accept:$secAccept\n\n";
 
+        Logger::log('worker', $this->pid, 'handshake for ' . (int)$socket . " done.");
+
         try {
             fwrite($socket, $response);
             return $this->afterHandshake($headers, $socket);
@@ -95,20 +100,20 @@ abstract class Worker
         $data = Frame::decode($client);
 
         switch ($data['opcode']) {
-            case Frame::CLOSE: {
+            case Frame::CLOSE:
+                Logger::log('worker', $this->pid, 'close', (int)$client);
                 yield Dispatcher::make($this->onClose((int)$client));
                 unset($this->clients[(int)$client]);
                 fclose($client);
                 break;
-            }
-            case Frame::PING: {
+            case Frame::PING:
+                Logger::log('worker', $this->pid, 'ping', (int)$client);
                 yield Dispatcher::make($this->write($client, Frame::encode('', Frame::PONG)));
                 break;
-            }
-            case Frame::TEXT: {
+            case Frame::TEXT:
+                Logger::log('worker', $this->pid, 'text from', (int)$client);
                 yield Dispatcher::make($this->onDirectMessage($data['payload'], (int)$client));
                 break;
-            }
         }
 
         yield Dispatcher::make($this->read($client));
@@ -122,6 +127,7 @@ abstract class Worker
     protected function write($client, $data): Generator
     {
         yield Dispatcher::listenWrite($client);
+        Logger::log('worker', $this->pid, 'fwrite to', (int)$client . ' - ' . (string)$data);
         @fwrite($client, $data);
     }
 
@@ -133,14 +139,17 @@ abstract class Worker
     {
         yield Dispatcher::listenRead($client);
         yield Dispatcher::listenWrite($client);
+        Logger::log('worker', $this->pid, 'accept', (int)$client);
 
         if (!$this->handshake($client)) {
+            Logger::log('worker', $this->pid, 'handshake for ' . (int)$client . ' aborted');
             unset($this->clients[(int)$client]);
             fclose($client);
         } else {
+            Logger::log('worker', $this->pid, 'connection accepted for', (int)$client);
             $this->clients[(int)$client] = $client;
-            yield Dispatcher::make($this->onConnect($client));
 
+            yield Dispatcher::make($this->onConnect($client));
             yield Dispatcher::make($this->read($client));
         }
     }
@@ -150,14 +159,16 @@ abstract class Worker
      */
     protected function listerMaster(): Generator
     {
-        while (true) {
-            yield Dispatcher::listenRead($this->master);
-            $data = Frame::decode($this->master);
+        yield Dispatcher::listenRead($this->master);
+        yield Dispatcher::listenWrite($this->master);
+        $data = Frame::decode($this->master);
+        Logger::log('worker', $this->pid, 'data received from master');
 
-            if ($data['opcode'] == Frame::TEXT) {
-                yield Dispatcher::make($this->onFilteredMessage($data['payload']));
-            }
+        if ($data['opcode'] == Frame::TEXT) {
+            Logger::log('worker', $this->pid, 'received text from master:', $data['payload']);
+            yield Dispatcher::make($this->onFilteredMessage($data['payload']));
         }
+        yield Dispatcher::make($this->listerMaster());
     }
 
     /**
@@ -167,13 +178,14 @@ abstract class Worker
      */
     protected function listenSocket(): Generator
     {
-        while (true) {
-            yield Dispatcher::listenRead($this->server);
+        yield Dispatcher::listenRead($this->server);
 
-            if ($client = @stream_socket_accept($this->server)) {
-                yield Dispatcher::make($this->accept($client));
-            }
+        if ($client = @stream_socket_accept($this->server)) {
+            Logger::log('worker', $this->pid, 'socket accepted');
+            yield Dispatcher::make($this->accept($client));
         }
+
+        yield Dispatcher::make($this->listenSocket());
     }
 
     /**
