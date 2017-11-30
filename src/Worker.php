@@ -108,7 +108,7 @@ abstract class Worker
                 break;
             case Frame::PING:
                 Logger::log('worker', $this->pid, 'ping', (int)$client);
-                yield Dispatcher::make($this->write($client, Frame::encode('', Frame::PONG)));
+                yield Dispatcher::make($this->write($client, Frame::encode($data['payload'], Frame::PONG)));
                 break;
             case Frame::TEXT:
                 Logger::log('worker', $this->pid, 'text from', (int)$client);
