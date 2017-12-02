@@ -52,7 +52,13 @@ class Logger
                 $speaker = "\033[1;35m" . $speakerId . "\033[0m";
         }
 
-        $log = "\033[1;37m" . \DateTime::createFromFormat('U.u', microtime(true))->format("i:s:u") . "\033[0m ";
+        $log = "\033[1;37m";
+        try {
+            $log .= \DateTime::createFromFormat('U.u', microtime(true))->format("i:s:u");
+        } catch (\Throwable $exception) {
+            $log .= 'cannot get current time. God damn fast!';
+        }
+        $log .= "\033[0m ";
         $log .= $speaker . " ";
         $log .= "\033[1;32m" . $message . "\033[0m ";
         $log .= "\033[42m" . $raw . "\033[0m\n";

@@ -54,7 +54,7 @@ final class Dispatcher
             $write[] = $socket;
         }
 
-        if (!@stream_select($read, $write, $except, $timeout)) {
+        if (@stream_select($read, $write, $except, $timeout) === false) {
             return;
         }
 
@@ -102,6 +102,20 @@ final class Dispatcher
     }
 
     /**
+     * @param int $socketId
+     */
+    public function removeClient(int $socketId): void
+    {
+        if (isset($this->read[$socketId])) {
+            unset($this->read[$socketId]);
+        }
+
+        if (isset($this->write[$socketId])) {
+            unset($this->write[$socketId]);
+        }
+    }
+
+    /**
      * @param $socket
      * @param Job $job
      * @return void
@@ -144,7 +158,7 @@ final class Dispatcher
      * @param Generator $process
      * @return SysCall
      */
-    public static function make(Generator $process): SysCall
+    public static function async(Generator $process): SysCall
     {
         return new SysCall(
             function (Job $job, Dispatcher $dispatcher) use ($process) {
@@ -176,6 +190,19 @@ final class Dispatcher
         return new SysCall(
             function (Job $job, Dispatcher $dispatcher) use ($socket) {
                 $dispatcher->appendWrite($socket, $job);
+            }
+        );
+    }
+
+    /**
+     * @param $socketId
+     * @return SysCall
+     */
+    public static function listenRemove($socketId): SysCall
+    {
+        return new SysCall(
+            function (Job $job, Dispatcher $dispatcher) use ($socketId) {
+                $dispatcher->removeClient($socketId);
             }
         );
     }

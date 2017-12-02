@@ -7,7 +7,7 @@ use Generator;
  * Class Worker
  * @package Ollyxar\WebSockets
  */
-abstract class Worker
+abstract class Handler
 {
     protected $server;
     protected $master;
@@ -31,19 +31,14 @@ abstract class Worker
      * Sending message to all connected users
      *
      * @param string $msg
-     * @param bool $global
      * @return Generator
      */
-    protected function sendToAll(string $msg, bool $global = true): Generator
+    protected function sendToAll(string $msg): Generator
     {
         Logger::log('worker', $this->pid, 'send to all: ', $msg);
 
         foreach ($this->clients as $client) {
-            yield Dispatcher::make($this->write($client, $msg));
-        }
-
-        if ($global) {
-            yield Dispatcher::make($this->write($this->master, $msg));
+            yield Dispatcher::async($this->write($client, $msg));
         }
     }
 
@@ -51,10 +46,11 @@ abstract class Worker
      * Performing handshake
      *
      * @param $socket
-     * @return bool
+     * @return Generator
      */
-    private function handshake($socket): bool
+    private function handshake($socket): Generator
     {
+        yield Dispatcher::listenRead($socket);
         Logger::log('worker', $this->pid, 'handshake for ', (int)$socket);
         $headers = [];
         $lines = preg_split("/\r\n/", @fread($socket, 4096));
@@ -67,7 +63,7 @@ abstract class Worker
         }
 
         if (!isset($headers['Sec-WebSocket-Key'])) {
-            return false;
+            return yield;
         }
 
         $secKey = $headers['Sec-WebSocket-Key'];
@@ -81,10 +77,10 @@ abstract class Worker
         Logger::log('worker', $this->pid, 'handshake for ' . (int)$socket . " done.");
 
         try {
-            fwrite($socket, $response);
-            return $this->afterHandshake($headers, $socket);
+            yield Dispatcher::async($this->write($socket, $response));
+            yield Dispatcher::async($this->afterHandshake($headers, $socket));
         } catch (Exception $e) {
-            return false;
+            return yield;
         }
     }
 
@@ -95,28 +91,28 @@ abstract class Worker
     protected function read($client): Generator
     {
         yield Dispatcher::listenRead($client);
-        yield Dispatcher::listenWrite($client);
 
         $data = Frame::decode($client);
 
         switch ($data['opcode']) {
             case Frame::CLOSE:
                 Logger::log('worker', $this->pid, 'close', (int)$client);
-                yield Dispatcher::make($this->onClose((int)$client));
+                yield Dispatcher::async($this->onClose((int)$client));
+                yield Dispatcher::listenRemove((int)$client);
                 unset($this->clients[(int)$client]);
                 fclose($client);
                 break;
             case Frame::PING:
                 Logger::log('worker', $this->pid, 'ping', (int)$client);
-                yield Dispatcher::make($this->write($client, Frame::encode($data['payload'], Frame::PONG)));
+                yield Dispatcher::async($this->write($client, Frame::encode($data['payload'], Frame::PONG)));
                 break;
             case Frame::TEXT:
                 Logger::log('worker', $this->pid, 'text from', (int)$client);
-                yield Dispatcher::make($this->onDirectMessage($data['payload'], (int)$client));
+                yield Dispatcher::async($this->onClientMessage($data['payload'], (int)$client));
                 break;
         }
 
-        yield Dispatcher::make($this->read($client));
+        yield Dispatcher::async($this->read($client));
     }
 
     /**
@@ -132,29 +128,6 @@ abstract class Worker
     }
 
     /**
-     * @param $client
-     * @return Generator
-     */
-    protected function accept($client): Generator
-    {
-        yield Dispatcher::listenRead($client);
-        yield Dispatcher::listenWrite($client);
-        Logger::log('worker', $this->pid, 'accept', (int)$client);
-
-        if (!$this->handshake($client)) {
-            Logger::log('worker', $this->pid, 'handshake for ' . (int)$client . ' aborted');
-            unset($this->clients[(int)$client]);
-            fclose($client);
-        } else {
-            Logger::log('worker', $this->pid, 'connection accepted for', (int)$client);
-            $this->clients[(int)$client] = $client;
-
-            yield Dispatcher::make($this->onConnect($client));
-            yield Dispatcher::make($this->read($client));
-        }
-    }
-
-    /**
      * @return Generator
      */
     protected function listerMaster(): Generator
@@ -162,13 +135,12 @@ abstract class Worker
         yield Dispatcher::listenRead($this->master);
         yield Dispatcher::listenWrite($this->master);
         $data = Frame::decode($this->master);
-        Logger::log('worker', $this->pid, 'data received from master');
 
         if ($data['opcode'] == Frame::TEXT) {
             Logger::log('worker', $this->pid, 'received text from master:', $data['payload']);
-            yield Dispatcher::make($this->onFilteredMessage($data['payload']));
+            yield Dispatcher::async($this->onMasterMessage($data['payload']));
         }
-        yield Dispatcher::make($this->listerMaster());
+        yield Dispatcher::async($this->listerMaster());
     }
 
     /**
@@ -182,10 +154,15 @@ abstract class Worker
 
         if ($client = @stream_socket_accept($this->server)) {
             Logger::log('worker', $this->pid, 'socket accepted');
-            yield Dispatcher::make($this->accept($client));
+            yield Dispatcher::async($this->handshake($client));
         }
 
-        yield Dispatcher::make($this->listenSocket());
+        yield Dispatcher::async($this->listenSocket());
+    }
+
+    protected function validateClient(array $headers, $socket): bool
+    {
+        return true;
     }
 
     /**
@@ -193,11 +170,22 @@ abstract class Worker
      *
      * @param array $headers
      * @param $socket
-     * @return bool
+     * @return Generator
      */
-    protected function afterHandshake(array $headers, $socket): bool
+    private function afterHandshake(array $headers, $socket): Generator
     {
-        return true;
+        if (!$this->validateClient($headers, $socket)) {
+            Logger::log('worker', $this->pid, 'handshake for ' . (int)$socket . ' aborted');
+            unset($this->clients[(int)$socket]);
+            yield Dispatcher::listenRemove((int)$socket);
+            fclose($socket);
+        } else {
+            Logger::log('worker', $this->pid, 'connection accepted for', (int)$socket);
+            $this->clients[(int)$socket] = $socket;
+
+            yield Dispatcher::async($this->onConnect($socket));
+            yield Dispatcher::async($this->read($socket));
+        }
     }
 
     /**
@@ -218,28 +206,25 @@ abstract class Worker
 
     /**
      * This method called when user directly (from the browser) send a message
-     * Attention! Current method will retransmit data to the master. Because Master dispatching all messages
-     * and routing them to other processes. If you don't want to resend the data - overwrite this method
      *
      * @param string $message
      * @param int $socketId
      * @return Generator
      */
-    protected function onDirectMessage(string $message, int $socketId): Generator
+    protected function onClientMessage(string $message, int $socketId): Generator
     {
-        yield Dispatcher::make($this->sendToAll(Frame::encode($message)));
+        yield Dispatcher::async($this->sendToAll(Frame::encode($message)));
     }
 
     /**
-     * This method called when message received from the Master. It can be retransmitted message or message
-     * from Unix connector
+     * This method called when message received from the Master.
      *
      * @param string $message
      * @return Generator
      */
-    protected function onFilteredMessage(string $message): Generator
+    protected function onMasterMessage(string $message): Generator
     {
-        yield Dispatcher::make($this->sendToAll(Frame::encode($message), false));
+        yield Dispatcher::async($this->sendToAll(Frame::encode($message)));
     }
 
     /**
