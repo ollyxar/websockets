@@ -31,14 +31,19 @@ abstract class Handler
      * Sending message to all connected users
      *
      * @param string $msg
+     * @param bool $global
      * @return Generator
      */
-    protected function sendToAll(string $msg): Generator
+    protected function sendToAll(string $msg, bool $global = true): Generator
     {
         Logger::log('worker', $this->pid, 'send to all: ', $msg);
 
         foreach ($this->clients as $client) {
             yield Dispatcher::async($this->write($client, $msg));
+        }
+
+        if ($global) {
+            yield Dispatcher::async($this->write($this->master, $msg));
         }
     }
 
@@ -224,7 +229,7 @@ abstract class Handler
      */
     protected function onMasterMessage(string $message): Generator
     {
-        yield Dispatcher::async($this->sendToAll(Frame::encode($message)));
+        yield Dispatcher::async($this->sendToAll(Frame::encode($message), false));
     }
 
     /**

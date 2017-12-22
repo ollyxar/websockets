@@ -15,6 +15,7 @@ class Server
     protected $useSSL = false;
     protected $cert;
     protected $passPhrase;
+    protected $workerCount = 4;
     protected $handler;
     public static $connector = '/var/run/wsc.sock';
 
@@ -23,13 +24,15 @@ class Server
      *
      * @param string $host
      * @param int $port
+     * @param int $workerCount
      * @param bool $useSSL
      */
-    public function __construct(string $host, int $port, $useSSL = false)
+    public function __construct(string $host, int $port, int $workerCount = 4, $useSSL = false)
     {
         $this->host = $host;
         $this->port = $port;
         $this->useSSL = $useSSL;
+        $this->workerCount = $workerCount;
     }
 
     /**
@@ -80,23 +83,27 @@ class Server
      */
     private function spawn(): array
     {
-        $master = $handler = null;
+        $pid = $master = null;
+        $workers = [];
 
-        $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+        for ($i = 0; $i < $this->workerCount; $i++) {
+            $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
 
-        $pid = pcntl_fork();
+            $pid = pcntl_fork();
 
-        if ($pid == -1) {
-            throw new Exception('Cannot fork process');
-        } elseif ($pid) {
-            fclose($pair[0]);
-            $handler = $pair[1];
-        } else {
-            fclose($pair[1]);
-            $master = $pair[0];
+            if ($pid == -1) {
+                throw new Exception('Cannot fork process');
+            } elseif ($pid) {
+                fclose($pair[0]);
+                $workers[$pid] = $pair[1];
+            } else {
+                fclose($pair[1]);
+                $master = $pair[0];
+                break;
+            }
         }
 
-        return [$pid, $master, $handler];
+        return [$pid, $master, $workers];
     }
 
     /**
@@ -145,11 +152,11 @@ class Server
     {
         $this->makeSocket();
 
-        [$pid, $master, $handler] = $this->spawn();
+        [$pid, $master, $workers] = $this->spawn();
 
         if ($pid) {
             fclose($this->socket);
-            (new Master($handler, $this->unixConnector))->dispatch();
+            (new Master($workers, $this->unixConnector))->dispatch();
         } else {
             fclose($this->unixConnector);
             (new $this->handler($this->socket, $master))->handle();

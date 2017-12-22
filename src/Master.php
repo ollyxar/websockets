@@ -9,9 +9,9 @@ use Generator;
 final class Master
 {
     /**
-     * Socket handler
+     * @var array
      */
-    private $handler;
+    private $workers = [];
 
     /**
      * Unix socket connector
@@ -21,13 +21,40 @@ final class Master
     /**
      * Master constructor.
      *
-     * @param $handler
+     * @param $workers
      * @param $connector
      */
-    public function __construct($handler, $connector)
+    public function __construct($workers, $connector)
     {
-        $this->handler = $handler;
+        $this->workers = $workers;
         $this->connector = $connector;
+    }
+
+    /**
+     * @param $client
+     * @return Generator
+     */
+    protected function read($client): Generator
+    {
+        yield Dispatcher::listenRead($client);
+
+        Logger::log('master', posix_getpid(), 'data received from worker', (int)$client);
+        $data = Frame::decode($client);
+
+        if (!$data['opcode']) {
+            return yield;
+        }
+
+        foreach ($this->workers as $worker) {
+            if ($worker !== $client) {
+                Logger::log('master', posix_getpid(), 'write to worker', (int)$worker);
+
+                yield Dispatcher::listenWrite($worker);
+                yield Dispatcher::async($this->write($worker, Frame::encode($data['payload'], $data['opcode'])));
+            }
+        }
+
+        yield Dispatcher::async($this->read($client));
     }
 
     /**
@@ -46,6 +73,16 @@ final class Master
     /**
      * @return Generator
      */
+    protected function listenWorkers(): Generator
+    {
+        foreach ($this->workers as $worker) {
+            yield Dispatcher::async($this->read($worker));
+        }
+    }
+
+    /**
+     * @return Generator
+     */
     protected function listenConnector(): Generator
     {
         yield Dispatcher::listenRead($this->connector);
@@ -58,8 +95,10 @@ final class Master
                 return yield;
             }
 
-            yield Dispatcher::listenWrite($this->handler);
-            yield Dispatcher::async($this->write($this->handler, Frame::encode($data['payload'], $data['opcode'])));
+            foreach ($this->workers as $worker) {
+                yield Dispatcher::listenWrite($worker);
+                yield Dispatcher::async($this->write($worker, Frame::encode($data['payload'], $data['opcode'])));
+            }
         }
 
         yield Dispatcher::async($this->listenConnector());
@@ -74,6 +113,7 @@ final class Master
     {
         (new Dispatcher())
             ->add($this->listenConnector())
+            ->add($this->listenWorkers())
             ->dispatch();
     }
 }
