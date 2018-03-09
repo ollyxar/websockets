@@ -104,7 +104,7 @@ class MyHandler extends BaseHandler
             'message' => $userMessage
         ]));
 
-        yield Dispatcher::async($this->sendToAll($response));
+        yield Dispatcher::async($this->broadcast($response));
     }
 }
 ```
