@@ -68,6 +68,7 @@ class Server
         $this->socket = stream_socket_server("$protocol://{$this->host}:{$this->port}", $errorNumber, $errorString, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
 
         $this->unixConnector = stream_socket_server('unix://' . static::$connector, $errorNumber, $errorString, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
+
         chmod(static::$connector, 0777);
 
         if (!$this->socket) {
@@ -115,6 +116,7 @@ class Server
     public function setHandler(string $handler): self
     {
         $this->handler = $handler;
+
         return $this;
     }
 
@@ -127,6 +129,7 @@ class Server
     public function setCert(string $cert = '/etc/nginx/conf.d/wss.pem'): self
     {
         $this->cert = $cert;
+
         return $this;
     }
 
@@ -139,6 +142,7 @@ class Server
     public function setPassPhrase(string $passPhrase = 'abracadabra'): self
     {
         $this->passPhrase = $passPhrase;
+
         return $this;
     }
 

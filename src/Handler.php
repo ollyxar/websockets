@@ -34,7 +34,7 @@ abstract class Handler
      * @param bool $global
      * @return Generator
      */
-    protected function sendToAll(string $msg, bool $global = true): Generator
+    protected function broadcast(string $msg, bool $global = true): Generator
     {
         Logger::log('worker', $this->pid, 'send to all: ', $msg);
 
@@ -165,6 +165,13 @@ abstract class Handler
         yield Dispatcher::async($this->listenSocket());
     }
 
+    /**
+     * Use this method for custom user validation
+     *
+     * @param array $headers
+     * @param $socket
+     * @return bool
+     */
     protected function validateClient(array $headers, $socket): bool
     {
         return true;
@@ -218,7 +225,7 @@ abstract class Handler
      */
     protected function onClientMessage(string $message, int $socketId): Generator
     {
-        yield Dispatcher::async($this->sendToAll(Frame::encode($message)));
+        yield Dispatcher::async($this->broadcast(Frame::encode($message)));
     }
 
     /**
@@ -229,7 +236,7 @@ abstract class Handler
      */
     protected function onMasterMessage(string $message): Generator
     {
-        yield Dispatcher::async($this->sendToAll(Frame::encode($message), false));
+        yield Dispatcher::async($this->broadcast(Frame::encode($message), false));
     }
 
     /**

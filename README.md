@@ -13,10 +13,12 @@ Simple and multifunctional PHP WebSocket server
 
 ![chat](https://i.imgur.com/7M9LhTD.jpg)
 
+#### Performance
+![ollyxar websockets performance](https://ollyxar.com/img/blog/wss.png)
+
 ## Installing WebSockets
 
-The recommended way to install WebSockets is through
-[Composer](http://getcomposer.org).
+The recommended way to install WebSockets is through [Composer](http://getcomposer.org).
 
 ```bash
 # Install Composer
@@ -37,16 +39,18 @@ require 'vendor/autoload.php';
 
 ## Simple WebSocket server
 
+### MyHandler.php
+
 ```php
 use Generator;
 use Ollyxar\LaravelAuth\FileAuth;
 use Ollyxar\WebSockets\{
     Frame,
-    Worker,
+    Handler as BaseHandler,
     Dispatcher
 };
 
-class MyHandler extends Handler
+class MyHandler extends BaseHandler
 {
     /**
      * MyHandler constructor.
@@ -65,7 +69,7 @@ class MyHandler extends Handler
      */
     protected function onConnect($client): Generator
     {
-        yield Dispatcher::make($this->sendToAll(WFrame::encode(json_encode([
+        yield Dispatcher::async($this->broadcast(Frame::encode(json_encode([
             'type'    => 'system',
             'message' => 'User {' . (int)$client . '} Connected.'
         ]))));
@@ -73,10 +77,11 @@ class MyHandler extends Handler
 
     /**
      * @param $clientNumber
+     * @return Generator
      */
     protected function onClose($clientNumber): Generator
     {
-        yield Dispatcher::make($this->sendToAll(WFrame::encode(json_encode([
+        yield Dispatcher::async($this->broadcast(Frame::encode(json_encode([
             'type'    => 'system',
             'message' => "User {$clientNumber} disconnected."
         ]))));
@@ -84,33 +89,68 @@ class MyHandler extends Handler
 
     /**
      * @param string $message
+     * @param int $socketId
      * @return Generator
      */
-    protected function onDirectMessage(string $message): Generator
+    protected function onClientMessage(string $message, int $socketId): Generator
     {
         $message = json_decode($message);
         $userName = $message->name;
         $userMessage = $message->message;
 
-        $response = WFrame::encode(json_encode([
+        $response = Frame::encode(json_encode([
             'type'    => 'usermsg',
             'name'    => $userName,
             'message' => $userMessage
         ]));
 
-        yield Dispatcher::make($this->sendToAll($response));
+        yield Dispatcher::async($this->sendToAll($response));
     }
 }
+```
 
+### User validation
+
+Base `Handler` has own method to validate user to be logged in. By default it is always return true. You should provide your own implementation of method to authorize users.
+
+```php
+    /**
+     * Use this method for custom user validation
+     *
+     * @param array $headers
+     * @param $socket
+     * @return bool
+     */
+    protected function validateClient(array $headers, $socket): bool
+    {
+        return true;
+    }
+```
+
+### ws-server.php
+
+```php
 /**
  * Lets start our server
  */
-(new WServer('0.0.0.0', 2083, 6, true))
+(new Server('0.0.0.0', 2083, 6, true))
     ->setCert()
     ->setPassPhrase()
     ->setHandler(MyHandler::class)
     ->run();
 ```
+
+
+### Realtime testing (logging)
+
+The server has internal logger that can output info into console.
+All that you need is just to enable logging before launching server.
+
+```php
+Logger::enable();
+```
+
+![output logging](https://i.imgur.com/HaukgbL.jpg)
 
 ### Communicate with server outside the wss protocol
 
