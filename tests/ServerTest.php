@@ -51,7 +51,7 @@ class ServerTest extends TestCase
      */
     private function stopServer(): void
     {
-        posix_kill($this->serverPid, SIGTERM);
+        posix_kill($this->serverPid, SIGINT);
     }
 
     /**
