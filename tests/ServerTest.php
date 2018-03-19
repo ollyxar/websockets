@@ -151,7 +151,7 @@ class ServerTest extends TestCase
      */
     public function __destruct()
     {
-        $this->stopServer();
+        //$this->stopServer(); // doesn't work on TravisCI
         @unlink(static::CERT['path']);
     }
 
