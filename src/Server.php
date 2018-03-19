@@ -45,12 +45,22 @@ class Server
     }
 
     /**
+     * Server destructor.
+     */
+    public function __destruct()
+    {
+        if (file_exists(static::$connector)) {
+            unlink(static::$connector);
+        }
+    }
+
+    /**
      * Make server sockets
      *
      * @throws SocketException
      * @return void
      */
-    private function makeSocket(): void
+    protected function makeSocket(): void
     {
         if ($this->useSSL) {
             $context = stream_context_create([
@@ -92,7 +102,7 @@ class Server
      * @throws ForkException
      * @return array
      */
-    private function spawn(): array
+    protected function spawn(): array
     {
         $pid = $master = null;
         $workers = [];
@@ -115,6 +125,28 @@ class Server
         }
 
         return [$pid, $master, $workers];
+    }
+
+    /**
+     * Process system signals
+     *
+     * @param $workers
+     * @return void
+     */
+    protected function handleSignals(&$workers): void
+    {
+        foreach ([SIGTERM, SIGQUIT, SIGABRT, SIGINT] as $signal) {
+            pcntl_signal($signal, function ($signal) use ($workers) {
+                Logger::log('master', posix_getpid(), 'Stopping workers...');
+
+                foreach ($workers as $pid => $worker) {
+                    posix_kill($pid, $signal);
+                }
+
+                Logger::log('master', posix_getpid(), 'Server stopped.');
+                exit(0);
+            });
+        }
     }
 
     /**
@@ -159,18 +191,23 @@ class Server
     /**
      * Launching server
      *
-     * @return void
      * @throws ForkException
      * @throws SocketException
+     * @return void
      */
     public function run(): void
     {
+        pcntl_async_signals(true);
+
         $this->makeSocket();
 
         [$pid, $master, $workers] = $this->spawn();
 
         if ($pid) {
             fclose($this->socket);
+
+            $this->handleSignals($workers);
+
             (new Master($workers, $this->unixConnector, $this->exchangeWorkersData))->dispatch();
         } else {
             if ($this->useConnector) {
