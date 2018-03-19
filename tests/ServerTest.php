@@ -35,6 +35,7 @@ class ServerTest extends TestCase
     private function startServer(): void
     {
         Logger::enable();
+        Server::$connector = '/tmp/ws.sock';
 
         (new Server('0.0.0.0', static::PORT, 2, true))
             ->setHandler(Handler::class)
