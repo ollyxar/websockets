@@ -1,6 +1,5 @@
 <?php namespace Ollyxar\WebSockets;
 
-use Exception;
 use Generator;
 
 /**
@@ -28,7 +27,8 @@ abstract class Handler
     }
 
     /**
-     * Sending message to all connected users
+     * Sending message to all connected users.
+     * If $global is true then worker will send data to master to retransmit data to all workers
      *
      * @param string $msg
      * @param bool $global
@@ -84,7 +84,7 @@ abstract class Handler
         try {
             yield Dispatcher::async($this->write($socket, $response));
             yield Dispatcher::async($this->afterHandshake($headers, $socket));
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             return yield;
         }
     }

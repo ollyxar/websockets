@@ -1,6 +1,9 @@
 <?php namespace Ollyxar\WebSockets;
 
-use Exception;
+use Ollyxar\WebSockets\Exceptions\{
+    ForkException,
+    SocketException
+};
 
 /**
  * Class Server
@@ -13,6 +16,8 @@ class Server
     protected $host = '0.0.0.0';
     protected $port = 2083;
     protected $useSSL = false;
+    protected $useConnector = true;
+    protected $exchangeWorkersData = true;
     protected $cert;
     protected $passPhrase;
     protected $workerCount = 4;
@@ -26,27 +31,27 @@ class Server
      * @param int $port
      * @param int $workerCount
      * @param bool $useSSL
+     * @param bool $useConnector
+     * @param bool $exchangeWorkersData
      */
-    public function __construct(string $host, int $port, int $workerCount = 4, $useSSL = false)
+    public function __construct(string $host, int $port, int $workerCount = 4, $useSSL = false, $useConnector = true, $exchangeWorkersData = true)
     {
         $this->host = $host;
         $this->port = $port;
         $this->useSSL = $useSSL;
+        $this->useConnector = $useConnector;
+        $this->exchangeWorkersData = $exchangeWorkersData;
         $this->workerCount = $workerCount;
     }
 
     /**
      * Make server sockets
      *
-     * @throws Exception
+     * @throws SocketException
      * @return void
      */
     private function makeSocket(): void
     {
-        if (file_exists(static::$connector)) {
-            unlink(static::$connector);
-        }
-
         if ($this->useSSL) {
             $context = stream_context_create([
                 'ssl' => [
@@ -67,19 +72,24 @@ class Server
 
         $this->socket = stream_socket_server("$protocol://{$this->host}:{$this->port}", $errorNumber, $errorString, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
 
-        $this->unixConnector = stream_socket_server('unix://' . static::$connector, $errorNumber, $errorString, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
+        if ($this->useConnector) {
+            if (file_exists(static::$connector)) {
+                unlink(static::$connector);
+            }
 
-        chmod(static::$connector, 0777);
+            $this->unixConnector = stream_socket_server('unix://' . static::$connector, $errorNumber, $errorString, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
+            chmod(static::$connector, 0777);
+        }
 
         if (!$this->socket) {
-            throw new Exception($errorString, $errorNumber);
+            throw new SocketException($errorString, $errorNumber);
         }
     }
 
     /**
      * Spawning process to avoid system limits and increase performance
      *
-     * @throws Exception
+     * @throws ForkException
      * @return array
      */
     private function spawn(): array
@@ -93,7 +103,7 @@ class Server
             $pid = pcntl_fork();
 
             if ($pid == -1) {
-                throw new Exception('Cannot fork process');
+                throw new ForkException('Cannot fork process');
             } elseif ($pid) {
                 fclose($pair[0]);
                 $workers[$pid] = $pair[1];
@@ -150,7 +160,8 @@ class Server
      * Launching server
      *
      * @return void
-     * @throws Exception
+     * @throws ForkException
+     * @throws SocketException
      */
     public function run(): void
     {
@@ -162,7 +173,10 @@ class Server
             fclose($this->socket);
             (new Master($workers, $this->unixConnector))->dispatch();
         } else {
-            fclose($this->unixConnector);
+            if ($this->useConnector) {
+                fclose($this->unixConnector);
+            }
+
             (new $this->handler($this->socket, $master))->handle();
         }
     }

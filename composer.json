@@ -27,7 +27,8 @@
   },
   "autoload": {
     "psr-4": {
-      "Ollyxar\\WebSockets\\": "src/"
+      "Ollyxar\\WebSockets\\": "src/",
+      "Ollyxar\\WebSockets\\Exceptions\\": "src/Exceptions/"
     }
   },
   "autoload-dev": {

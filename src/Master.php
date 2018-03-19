@@ -19,15 +19,24 @@ final class Master
     private $connector;
 
     /**
+     * If true then Master will retransmit data from one worker to others
+     *
+     * @var bool
+     */
+    private $exchangeWorkersData = true;
+
+    /**
      * Master constructor.
      *
      * @param $workers
-     * @param $connector
+     * @param null $connector
+     * @param bool $exchangeWorkersData
      */
-    public function __construct($workers, $connector)
+    public function __construct($workers, $connector = null, $exchangeWorkersData = true)
     {
         $this->workers = $workers;
         $this->connector = $connector;
+        $this->exchangeWorkersData = $exchangeWorkersData;
     }
 
     /**
@@ -111,9 +120,16 @@ final class Master
      */
     public function dispatch(): void
     {
-        (new Dispatcher())
-            ->add($this->listenConnector())
-            ->add($this->listenWorkers())
-            ->dispatch();
+        $dispatcher = new Dispatcher();
+
+        if ($this->connector) {
+            $dispatcher->add($this->listenConnector());
+        }
+
+        if ($this->exchangeWorkersData) {
+            $dispatcher->add($this->listenWorkers());
+        }
+
+        $dispatcher->dispatch();
     }
 }
