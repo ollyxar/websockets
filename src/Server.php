@@ -171,7 +171,7 @@ class Server
 
         if ($pid) {
             fclose($this->socket);
-            (new Master($workers, $this->unixConnector))->dispatch();
+            (new Master($workers, $this->unixConnector, $this->exchangeWorkersData))->dispatch();
         } else {
             if ($this->useConnector) {
                 fclose($this->unixConnector);
