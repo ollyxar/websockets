@@ -2,10 +2,10 @@
 
 use PHPUnit\Framework\TestCase;
 use Ollyxar\WebSockets\{
+    Exceptions\ForkException,
+    Exceptions\SocketException,
     Frame,
     Server,
-    Exceptions\ForkException,
-    Logger,
     Ssl
 };
 
@@ -25,7 +25,8 @@ class ServerTest extends TestCase
         'path'       => '/tmp/cert.pem',
         'passPhrase' => 'qwerty123'
     ];
-    private $client;
+
+    public static $serverStarted = false;
 
     /**
      * Starts Server
@@ -34,24 +35,11 @@ class ServerTest extends TestCase
      */
     private function startServer(): void
     {
-        Logger::enable();
-        Server::$connector = '/tmp/ws.sock';
-
         (new Server('0.0.0.0', static::PORT, 2, true))
             ->setHandler(Handler::class)
             ->setCert(static::CERT['path'])
             ->setPassPhrase(static::CERT['passPhrase'])
             ->run();
-    }
-
-    /**
-     * Stops server
-     *
-     * @return void
-     */
-    private function stopServer(): void
-    {
-        posix_kill($this->serverPid, SIGINT);
     }
 
     /**
@@ -62,23 +50,30 @@ class ServerTest extends TestCase
      */
     private function forkProcess(): void
     {
+        if (static::$serverStarted) {
+            return;
+        }
+
         $pid = pcntl_fork();
 
         if ($pid == -1) {
             throw new ForkException('Cannot fork process');
         } elseif ($pid) {
             $this->serverPid = $pid;
+            sleep(3);
         } else {
             $this->startServer();
         }
+
+        static::$serverStarted = true;
     }
 
     /**
      * Making lightweight WebSocket client
      *
-     * @return void
+     * @return resource
      */
-    private function makeClient(): void
+    private function makeClient()
     {
         $context = stream_context_create([
             'ssl' => [
@@ -91,7 +86,9 @@ class ServerTest extends TestCase
             ]
         ]);
 
-        $this->client = stream_socket_client('ssl://localhost:' . static::PORT, $errorNumber, $errorString, null, STREAM_CLIENT_CONNECT | STREAM_CLIENT_PERSISTENT, $context);
+        sleep(3); // prevent receiving previous messages from queue
+
+        return stream_socket_client('ssl://localhost:' . static::PORT, $errorNumber, $errorString, null, STREAM_CLIENT_CONNECT | STREAM_CLIENT_PERSISTENT, $context);
     }
 
     /**
@@ -136,41 +133,81 @@ class ServerTest extends TestCase
     }
 
     /**
+     * ServerTest constructor.
+     *
+     * @param null $name
+     * @param array $data
+     * @param string $dataName
      * @throws ForkException
      */
-    public function setUp()
+    public function __construct($name = null, array $data = [], $dataName = '')
     {
+        Server::$connector = '/tmp/ws.sock';
         Ssl::generateCert(static::CERT['path'], static::CERT['passPhrase']);
         $this->forkProcess();
-        sleep(3);
-        $this->makeClient();
-    }
 
-    /**
-     * Free resources
-     */
-    public function __destruct()
-    {
-        //$this->stopServer(); // doesn't work on TravisCI
-        @unlink(static::CERT['path']);
+        parent::__construct($name, $data, $dataName);
     }
 
     /**
      * Simple messaging
+     *
+     * @throws SocketException
      */
     public function testBasicMessaging()
     {
-        fwrite($this->client, $this->generateHandshakeRequest());
-        $response = fread($this->client, 4096);
+        $client = $this->makeClient();
+
+        if (!$client) {
+            throw new SocketException('Client socket does not created properly');
+        }
+
+        fwrite($client, $this->generateHandshakeRequest());
+        $response = fread($client, 4096);
         $this->assertContains('101 Web Socket Protocol Handshake', $response);
 
-        $data = Frame::decode($this->client);
+        $data = Frame::decode($client);
         $this->assertArrayHasKey('payload', $data);
         $this->assertContains('connected.', $data['payload']);
 
-        fwrite($this->client, Frame::encode('Hello message'));
-        $data = Frame::decode($this->client);
+        fwrite($client, Frame::encode('client:hello'));
+        $data = Frame::decode($client);
         $this->assertArrayHasKey('payload', $data);
-        $this->assertEquals('Hello message', $data['payload']);
+        $this->assertEquals('client:hello', $data['payload']);
+
+        fclose($client);
+    }
+
+    /**
+     * Base connector test
+     *
+     * @throws SocketException
+     */
+    public function testConnector()
+    {
+        $client = $this->makeClient();
+
+        if (!$client) {
+            throw new SocketException('Client socket does not created properly');
+        }
+
+        fwrite($client, $this->generateHandshakeRequest());
+        $response = fread($client, 4096);
+        $this->assertContains('101 Web Socket Protocol Handshake', $response);
+
+        $data = Frame::decode($client);
+        $this->assertArrayHasKey('payload', $data);
+        $this->assertContains('connected.', $data['payload']);
+
+        $socket = socket_create(AF_UNIX, SOCK_STREAM, 0);
+        socket_connect($socket, Server::$connector);
+        socket_write($socket, Frame::encode('connector:hello'));
+        socket_close($socket);
+
+        $data = Frame::decode($client);
+        $this->assertArrayHasKey('payload', $data);
+        $this->assertEquals('connector:hello', $data['payload']);
+
+        fclose($client);
     }
 }

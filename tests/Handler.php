@@ -2,15 +2,19 @@
 
 use Generator;
 use Ollyxar\WebSockets\{
+    Dispatcher,
     Frame,
     Handler as BaseHandler,
-    Dispatcher,
     Logger
 };
 
 class Handler extends BaseHandler
 {
-
+    /**
+     * Handler constructor.
+     * @param $server
+     * @param $master
+     */
     public function __construct($server, $master)
     {
         parent::__construct($server, $master);
@@ -29,6 +33,10 @@ class Handler extends BaseHandler
         ]))));
     }
 
+    /**
+     * @param $clientNumber
+     * @return Generator
+     */
     protected function onClose($clientNumber): Generator
     {
         yield Dispatcher::async($this->broadcast(Frame::encode(json_encode([
