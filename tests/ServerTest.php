@@ -86,7 +86,7 @@ class ServerTest extends TestCase
             ]
         ]);
 
-        sleep(3); // prevent receiving previous messages from queue
+        usleep(100); // keep queue for more real case
 
         return stream_socket_client('ssl://localhost:' . static::PORT, $errorNumber, $errorString, null, STREAM_CLIENT_CONNECT | STREAM_CLIENT_PERSISTENT, $context);
     }
@@ -204,9 +204,18 @@ class ServerTest extends TestCase
         socket_write($socket, Frame::encode('connector:hello'));
         socket_close($socket);
 
-        $data = Frame::decode($client);
-        $this->assertArrayHasKey('payload', $data);
-        $this->assertEquals('connector:hello', $data['payload']);
+        $found = false;
+
+        while (!$found) {
+            $data = Frame::decode($client);
+            $this->assertArrayHasKey('payload', $data);
+
+            if ($data['payload'] == 'connector:hello') {
+                $found = true;
+            }
+        }
+
+        $this->assertTrue($found);
 
         fclose($client);
     }
