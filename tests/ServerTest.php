@@ -150,11 +150,44 @@ class ServerTest extends TestCase
     }
 
     /**
+     * Server setup/destroy
+     *
+     * @return void
+     */
+    public function testServerSetupDestroy(): void
+    {
+        Server::$connector = '/tmp/temp1.sock';
+
+        $server = (new Server('0.0.0.0', 2930, 2, true))
+            ->setHandler(Handler::class)
+            ->setCert(static::CERT['path'])
+            ->setPassPhrase(static::CERT['passPhrase']);
+
+        unset($server);
+
+        $this->assertFalse(file_exists(Server::$connector));
+
+        Server::$connector = '/tmp/ws.sock';
+    }
+
+    /**
+     * Making ssl certificate
+     *
+     * @return void
+     */
+    public function testMakeSslCert(): void
+    {
+        Ssl::generateCert(static::CERT['path'], static::CERT['passPhrase']);
+        $this->assertTrue(file_exists(static::CERT['path']));
+    }
+
+    /**
      * Simple messaging
      *
      * @throws SocketException
+     * @return void
      */
-    public function testBasicMessaging()
+    public function testBasicMessaging(): void
     {
         $client = $this->makeClient();
 
@@ -182,8 +215,9 @@ class ServerTest extends TestCase
      * Base connector test
      *
      * @throws SocketException
+     * @return void
      */
-    public function testConnector()
+    public function testConnector(): void
     {
         $client = $this->makeClient();
 
