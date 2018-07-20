@@ -74,10 +74,10 @@ abstract class Handler
         $secKey = $headers['Sec-WebSocket-Key'];
         $secAccept = base64_encode(pack('H*', sha1($secKey . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
 
-        $response = "HTTP/1.1 101 Web Socket Protocol Handshake\n" .
-            "Upgrade: websocket\n" .
-            "Connection: Upgrade\n" .
-            "Sec-WebSocket-Accept:$secAccept\n\n";
+        $response = "HTTP/1.1 101 Web Socket Protocol Handshake\r\n" .
+            "Upgrade: websocket\r\n" .
+            "Connection: Upgrade\r\n" .
+            "Sec-WebSocket-Accept:$secAccept\r\n\r\n";
 
         Logger::log('worker', $this->pid, 'handshake for ' . (int)$socket . " done.");
 
