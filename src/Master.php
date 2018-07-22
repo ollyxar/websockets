@@ -76,7 +76,13 @@ final class Master
         Logger::log('master', posix_getpid(), 'write to ' . (int)$client, $data);
 
         yield Dispatcher::listenWrite($client);
-        fwrite($client, $data);
+        
+        //Check if connection is writable. This is causing the Broken pipe error 
+        $meta = stream_get_meta_data($client); 
+ 
+        if(isset($meta['uri']) && is_writable($meta['uri'])) { 
+            fwrite($client, $data); 
+        } 
     }
 
     /**
