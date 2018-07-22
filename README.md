@@ -95,16 +95,18 @@ class MyHandler extends BaseHandler
     protected function onClientMessage(string $message, int $socketId): Generator
     {
         $message = json_decode($message);
-        $userName = $message->name;
-        $userMessage = $message->message;
+        if(!empty($message)){
+            $userName = $message->name;
+            $userMessage = $message->message;
 
-        $response = Frame::encode(json_encode([
-            'type'    => 'usermsg',
-            'name'    => $userName,
-            'message' => $userMessage
-        ]));
+            $response = Frame::encode(json_encode([
+                'type'    => 'usermsg',
+                'name'    => $userName,
+                'message' => $userMessage
+            ]));
 
-        yield Dispatcher::async($this->broadcast($response));
+            yield Dispatcher::async($this->broadcast($response));
+        }
     }
 }
 ```
