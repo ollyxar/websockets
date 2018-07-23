@@ -1,6 +1,7 @@
 <?php namespace Ollyxar\WebSockets;
 
-class Ssl {
+class Ssl
+{
     public static function generateCert(string $certPath, string $pemPassPhrase): void
     {
         $certificateData = [
@@ -13,9 +14,13 @@ class Ssl {
             "emailAddress"           => "custom@email.com"
         ];
 
-        $privateKey = openssl_pkey_new();
-        $certificate = openssl_csr_new($certificateData, $privateKey);
-        $certificate = openssl_csr_sign($certificate, null, $privateKey, 365);
+        $privateKey = openssl_pkey_new([
+            'curve_name'       => 'prime256v1',
+            'private_key_type' => OPENSSL_KEYTYPE_EC
+        ]);
+
+        $certificate = openssl_csr_new($certificateData, $privateKey, ['digest_alg' => 'sha384']);
+        $certificate = openssl_csr_sign($certificate, null, $privateKey, 365, ['digest_alg' => 'sha384']);
 
         $pem = [];
         openssl_x509_export($certificate, $pem[0]);

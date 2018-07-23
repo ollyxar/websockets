@@ -57,12 +57,16 @@ class Server
     /**
      * Make server sockets
      *
-     * @throws SocketException
+     * @throws SocketException|\Exception
      * @return void
      */
     protected function makeSocket(): void
     {
         if ($this->useSSL) {
+            if (!file_exists($this->cert)) {
+                throw new \Exception('Cert file not found');
+            }
+
             $context = stream_context_create([
                 'ssl' => [
                     'local_cert'        => $this->cert,
