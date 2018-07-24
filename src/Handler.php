@@ -130,12 +130,10 @@ abstract class Handler
         yield Dispatcher::listenWrite($client);
         Logger::log('worker', $this->pid, 'fwrite to', (int)$client . ' - ' . (string)$data);
 
-        if (is_resource($client)) {
-            $meta = stream_get_meta_data($client);
-
-            if (isset($meta['mode']) && strpos((string)$meta['mode'], '+') !== false) {
-                fwrite($client, $data);
-            }
+        try {
+            fwrite($client, $data);
+        } catch (\Throwable $e) {
+            // Here you can implement error handler
         }
     }
 
