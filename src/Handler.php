@@ -131,7 +131,7 @@ abstract class Handler
         Logger::log('worker', $this->pid, 'fwrite to', (int)$client . ' - ' . (string)$data);
 
         try {
-            fwrite($client, $data);
+            @fwrite($client, $data);
         } catch (\Throwable $e) {
             // Here you can implement error handler
         }
