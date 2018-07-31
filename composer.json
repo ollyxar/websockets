@@ -20,7 +20,9 @@
     }
   ],
   "require": {
-    "php": ">=7.1"
+    "php": "^7.1",
+    "ext-posix": "^7.1",
+    "ext-pcntl": "^7.1"
   },
   "require-dev": {
     "phpunit/phpunit": "^6.0"

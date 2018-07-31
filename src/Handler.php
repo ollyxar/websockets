@@ -8,6 +8,9 @@ use Generator;
  */
 abstract class Handler
 {
+    protected $dispatcher;
+    protected $balancer = 'semaphore.balancer';
+    protected $useBalancer;
     protected $server;
     protected $master;
     protected $pid = 0;
@@ -18,12 +21,20 @@ abstract class Handler
      *
      * @param $server
      * @param $master
+     * @param bool $useBalancer
      */
-    public function __construct($server, $master)
+    public function __construct($server, $master, bool $useBalancer = true)
     {
+        $this->dispatcher = new Dispatcher();
         $this->server = $server;
         $this->master = $master;
         $this->pid = posix_getpid();
+
+        if ($useBalancer) {
+            $this->useBalancer = $useBalancer;
+            file_exists($this->balancer) or touch($this->balancer);
+            chmod($this->balancer, 0777);
+        }
     }
 
     /**
@@ -102,10 +113,10 @@ abstract class Handler
         switch ($data['opcode']) {
             case Frame::CLOSE:
                 Logger::log('worker', $this->pid, 'close', (int)$client);
-                yield Dispatcher::async($this->onClose((int)$client));
-                yield Dispatcher::listenRemove((int)$client);
+                $this->dispatcher->removeClient((int)$client);
                 unset($this->clients[(int)$client]);
                 fclose($client);
+                yield Dispatcher::async($this->onClose((int)$client));
                 break;
             case Frame::PING:
                 Logger::log('worker', $this->pid, 'ping', (int)$client);
@@ -154,6 +165,22 @@ abstract class Handler
     }
 
     /**
+     * @return Generator
+     */
+    protected function acceptSocket(): Generator
+    {
+        if ($client = @stream_socket_accept($this->server, -1)) {
+            Logger::log('worker', $this->pid, 'socket accepted');
+
+            if ($this->useBalancer) {
+                file_put_contents($this->balancer, $this->pid);
+            }
+
+            yield Dispatcher::async($this->handshake($client));
+        }
+    }
+
+    /**
      * Main socket listener
      *
      * @return Generator
@@ -162,9 +189,12 @@ abstract class Handler
     {
         yield Dispatcher::listenRead($this->server);
 
-        if ($client = @stream_socket_accept($this->server)) {
-            Logger::log('worker', $this->pid, 'socket accepted');
-            yield Dispatcher::async($this->handshake($client));
+        if ($this->useBalancer) {
+            if (file_get_contents($this->balancer) != $this->pid) {
+                yield Dispatcher::async($this->acceptSocket());
+            }
+        } else {
+            yield Dispatcher::async($this->acceptSocket());
         }
 
         yield Dispatcher::async($this->listenSocket());
@@ -251,7 +281,7 @@ abstract class Handler
      */
     final public function handle(): void
     {
-        (new Dispatcher())
+        $this->dispatcher
             ->add($this->listerMaster())
             ->add($this->listenSocket())
             ->dispatch();
