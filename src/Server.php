@@ -218,7 +218,7 @@ class Server
                 fclose($this->unixConnector);
             }
 
-            (new $this->handler($this->socket, $master, $this->workerCount > 1))->handle();
+            (new $this->handler($this->socket, $master))->handle();
         }
     }
 }

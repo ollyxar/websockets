@@ -9,8 +9,7 @@ use Generator;
 abstract class Handler
 {
     protected $dispatcher;
-    protected $balancer = 'semaphore.balancer';
-    protected $useBalancer;
+    protected $locker = 'semaphore.lock';
     protected $server;
     protected $master;
     protected $pid = 0;
@@ -21,20 +20,13 @@ abstract class Handler
      *
      * @param $server
      * @param $master
-     * @param bool $useBalancer
      */
-    public function __construct($server, $master, bool $useBalancer = true)
+    public function __construct($server, $master)
     {
         $this->dispatcher = new Dispatcher();
         $this->server = $server;
         $this->master = $master;
         $this->pid = posix_getpid();
-
-        if ($useBalancer) {
-            $this->useBalancer = $useBalancer;
-            file_exists($this->balancer) or touch($this->balancer);
-            chmod($this->balancer, 0777);
-        }
     }
 
     /**
@@ -73,6 +65,7 @@ abstract class Handler
 
         foreach ($lines as $line) {
             $line = rtrim($line);
+
             if (preg_match('/\A(\S+): (.*)\z/', $line, $matches)) {
                 $headers[$matches[1]] = $matches[2];
             }
@@ -84,7 +77,6 @@ abstract class Handler
 
         $secKey = $headers['Sec-WebSocket-Key'];
         $secAccept = base64_encode(pack('H*', sha1($secKey . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
-
         $response = "HTTP/1.1 101 Web Socket Protocol Handshake\r\n" .
             "Upgrade: websocket\r\n" .
             "Connection: Upgrade\r\n" .
@@ -107,7 +99,6 @@ abstract class Handler
     protected function read($client): Generator
     {
         yield Dispatcher::listenRead($client);
-
         $data = Frame::decode($client);
 
         switch ($data['opcode']) {
@@ -161,6 +152,7 @@ abstract class Handler
             Logger::log('worker', $this->pid, 'received text from master:', $data['payload']);
             yield Dispatcher::async($this->onMasterMessage($data['payload']));
         }
+
         yield Dispatcher::async($this->listerMaster());
     }
 
@@ -169,13 +161,8 @@ abstract class Handler
      */
     protected function acceptSocket(): Generator
     {
-        if ($client = @stream_socket_accept($this->server, -1)) {
+        if ($client = @stream_socket_accept($this->server, 0, $peerName)) {
             Logger::log('worker', $this->pid, 'socket accepted');
-
-            if ($this->useBalancer) {
-                file_put_contents($this->balancer, $this->pid);
-            }
-
             yield Dispatcher::async($this->handshake($client));
         }
     }
@@ -188,15 +175,14 @@ abstract class Handler
     protected function listenSocket(): Generator
     {
         yield Dispatcher::listenRead($this->server);
+        $handle = fopen($this->locker, 'a');
 
-        if ($this->useBalancer) {
-            if (file_get_contents($this->balancer) != $this->pid) {
-                yield Dispatcher::async($this->acceptSocket());
-            }
-        } else {
+        if ($handle && flock($handle, LOCK_EX)) {
             yield Dispatcher::async($this->acceptSocket());
+            flock($handle, LOCK_UN);
         }
 
+        fclose($handle);
         yield Dispatcher::async($this->listenSocket());
     }
 
@@ -229,7 +215,6 @@ abstract class Handler
         } else {
             Logger::log('worker', $this->pid, 'connection accepted for', (int)$socket);
             $this->clients[(int)$socket] = $socket;
-
             yield Dispatcher::async($this->onConnect($socket));
             yield Dispatcher::async($this->read($socket));
         }
