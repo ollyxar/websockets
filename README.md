@@ -95,7 +95,7 @@ class MyHandler extends BaseHandler
     protected function onClientMessage(string $message, int $socketId): Generator
     {
         $message = json_decode($message);
-        if(!empty($message)){
+        if (!empty($message)) {
             $userName = $message->name;
             $userMessage = $message->message;
 
@@ -142,6 +142,19 @@ Base `Handler` has own method to validate user to be logged in. By default it is
     ->run();
 ```
 
+### Nginx reverse proxy
+
+```nginx
+# choose location path
+location /websocket/ {
+    # use same host and port from your settings!
+    proxy_pass http://0.0.0.0:2082/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 86400;
+}
+```
 
 ### Realtime testing (logging)
 
