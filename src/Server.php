@@ -21,6 +21,7 @@ class Server
     protected $cert;
     protected $passPhrase;
     protected $workerCount = 4;
+    protected $workerPids = [];
     protected $handler;
     public static $connector = '/var/run/wsc.sock';
 
@@ -34,7 +35,7 @@ class Server
      * @param bool $useConnector
      * @param bool $exchangeWorkersData
      */
-    public function __construct(string $host, int $port, int $workerCount = 4, $useSSL = false, $useConnector = true, $exchangeWorkersData = true)
+    public function __construct(string $host, int $port, int $workerCount = 4, bool $useSSL = false, bool $useConnector = true, bool $exchangeWorkersData = true)
     {
         $this->host = $host;
         $this->port = $port;
@@ -132,23 +133,30 @@ class Server
     }
 
     /**
+     * @param $signal
+     */
+    protected function terminate($signal)
+    {
+        Logger::log('master', posix_getpid(), 'Stopping workers...');
+
+        foreach ($this->workerPids as $pid => $worker) {
+            posix_kill($pid, $signal);
+        }
+
+        Logger::log('master', posix_getpid(), 'Server stopped.');
+        exit(0);
+    }
+
+    /**
      * Process system signals
      *
-     * @param $workers
      * @return void
      */
-    protected function handleSignals(&$workers): void
+    protected function handleSignals(): void
     {
         foreach ([SIGTERM, SIGQUIT, SIGABRT, SIGINT] as $signal) {
-            pcntl_signal($signal, function ($signal) use ($workers) {
-                Logger::log('master', posix_getpid(), 'Stopping workers...');
-
-                foreach ($workers as $pid => $worker) {
-                    posix_kill($pid, $signal);
-                }
-
-                Logger::log('master', posix_getpid(), 'Server stopped.');
-                exit(0);
+            pcntl_signal($signal, function ($signal) {
+                $this->terminate($signal);
             });
         }
     }
@@ -209,8 +217,8 @@ class Server
 
         if ($pid) {
             fclose($this->socket);
-
-            $this->handleSignals($workers);
+            $this->workerPids = $workers;
+            $this->handleSignals();
 
             (new Master($workers, $this->unixConnector, $this->exchangeWorkersData))->dispatch();
         } else {

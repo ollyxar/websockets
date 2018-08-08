@@ -56,7 +56,7 @@ abstract class Handler
      * @param $socket
      * @return Generator
      */
-    private function handshake($socket): Generator
+    protected function handshake($socket): Generator
     {
         yield Dispatcher::listenRead($socket);
         Logger::log('worker', $this->pid, 'handshake for ', (int)$socket);
@@ -75,6 +75,16 @@ abstract class Handler
             return yield;
         }
 
+        if (!$this->validateClient($headers, $socket)) {
+            Logger::log('worker', $this->pid, 'handshake for ' . (int)$socket . ' aborted');
+            unset($this->clients[(int)$socket]);
+            $this->dispatcher->removeClient((int)$socket);
+            yield Dispatcher::async($this->write($socket, "HTTP:/1.1 403 Forbidden\r\n"));
+            fclose($socket);
+
+            return yield;
+        }
+
         $secKey = $headers['Sec-WebSocket-Key'];
         $secAccept = base64_encode(pack('H*', sha1($secKey . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
         $response = "HTTP/1.1 101 Web Socket Protocol Handshake\r\n" .
@@ -86,7 +96,7 @@ abstract class Handler
 
         try {
             yield Dispatcher::async($this->write($socket, $response));
-            yield Dispatcher::async($this->afterHandshake($headers, $socket));
+            yield Dispatcher::async($this->afterHandshake($socket));
         } catch (\Throwable $e) {
             return yield;
         }
@@ -201,23 +211,15 @@ abstract class Handler
     /**
      * Process headers after handshake success
      *
-     * @param array $headers
      * @param $socket
      * @return Generator
      */
-    private function afterHandshake(array $headers, $socket): Generator
+    protected function afterHandshake($socket): Generator
     {
-        if (!$this->validateClient($headers, $socket)) {
-            Logger::log('worker', $this->pid, 'handshake for ' . (int)$socket . ' aborted');
-            unset($this->clients[(int)$socket]);
-            yield Dispatcher::listenRemove((int)$socket);
-            fclose($socket);
-        } else {
-            Logger::log('worker', $this->pid, 'connection accepted for', (int)$socket);
-            $this->clients[(int)$socket] = $socket;
-            yield Dispatcher::async($this->onConnect($socket));
-            yield Dispatcher::async($this->read($socket));
-        }
+        Logger::log('worker', $this->pid, 'connection accepted for', (int)$socket);
+        $this->clients[(int)$socket] = $socket;
+        yield Dispatcher::async($this->onConnect($socket));
+        yield Dispatcher::async($this->read($socket));
     }
 
     /**
